@@ -4,9 +4,11 @@ import {
   Get,
   Post,
   Request,
+  Res,
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiTags,
@@ -84,8 +86,13 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: '구글 로그인 콜백' })
-  async googleAuthRedirect(@Request() req) {
-    return this.authService.oAuthLogin(req.user);
+  @ApiResponse({
+    status: 302,
+    description: '로그인 성공 후 프론트엔드로 리다이렉트',
+  })
+  async googleAuthRedirect(@Request() req, @Res() res: Response) {
+    const { access_token } = await this.authService.oAuthLogin(req.user);
+    res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
   }
 
   @Get('kakao')
@@ -96,7 +103,12 @@ export class AuthController {
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
   @ApiOperation({ summary: '카카오 로그인 콜백' })
-  async kakaoAuthRedirect(@Request() req) {
-    return this.authService.oAuthLogin(req.user);
+  @ApiResponse({
+    status: 302,
+    description: '로그인 성공 후 프론트엔드로 리다이렉트',
+  })
+  async kakaoAuthRedirect(@Request() req, @Res() res: Response) {
+    const { access_token } = await this.authService.oAuthLogin(req.user);
+    res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
   }
 }
