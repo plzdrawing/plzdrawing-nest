@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Post } from '../entities/post.entity';
 import { PostImage } from '../entities/post-image.entity';
 import { Member } from '../entities/member.entity';
@@ -26,6 +30,7 @@ export class PostService {
     private readonly likeService: LikeService,
     private readonly reviewService: ReviewService,
     private readonly memberService: MemberService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(
@@ -33,30 +38,42 @@ export class PostService {
     data: Partial<Post>,
     files?: Array<Express.Multer.File>,
   ): Promise<Post> {
-    const post = this.postRepository.create({
-      ...data,
-      member,
-    });
-    const savedPost = await this.postRepository.save(post);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (files && files.length > 0) {
-      const imageUrls = await this.awsService.uploadFiles(files, 'posts');
+    try {
+      const post = queryRunner.manager.create(Post, {
+        ...data,
+        member,
+      });
+      const savedPost = await queryRunner.manager.save(post);
 
-      const postImages = imageUrls.map((url) =>
-        this.postImageRepository.create({
-          imageUrl: url,
-          post: savedPost,
-        }),
-      );
+      if (files && files.length > 0) {
+        const imageUrls = await this.awsService.uploadFiles(files, 'posts');
 
-      await this.postImageRepository.save(postImages);
+        const postImages = imageUrls.map((url) =>
+          queryRunner.manager.create(PostImage, {
+            imageUrl: url,
+            post: savedPost,
+          }),
+        );
 
-      // 첫 번째 이미지를 썸네일로 설정
-      savedPost.thumbnailUrl = imageUrls[0];
-      await this.postRepository.save(savedPost);
+        await queryRunner.manager.save(postImages);
+
+        // 첫 번째 이미지를 썸네일로 설정
+        savedPost.thumbnailUrl = imageUrls[0];
+        await queryRunner.manager.save(savedPost);
+      }
+
+      await queryRunner.commitTransaction();
+      return this.findOne(savedPost.id);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    return this.findOne(savedPost.id);
   }
 
   async findAll(
