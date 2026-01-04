@@ -20,8 +20,13 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   app.enableCors({
-    origin: true, // 개발 환경에서는 true로 설정, 배포 시 특정 도메인으로 제한 필요
-    credentials: true,
+    origin: [
+      'http://localhost:3000',
+      'https://plzdrawing.o-r.kr',
+      // 프론트엔드 배포 주소 추가 필요
+    ],
+    credentials: true, // 쿠키(세션/토큰) 전달 허용
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
   // Swagger 설정
