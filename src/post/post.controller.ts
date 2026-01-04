@@ -35,7 +35,11 @@ export class PostController {
   @UseGuards(AuthGuard('jwt'))
   @Post()
   @ApiBearerAuth('access-token')
-  @UseInterceptors(FilesInterceptor('images', 5)) // 최대 5장
+  @UseInterceptors(
+    FilesInterceptor('images', 5, {
+      limits: { fileSize: 10 * 1024 * 1024 }, // 파일당 10MB 제한
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '게시글 작성' })
   @ApiResponse({ status: 201, description: '게시글 작성 성공' })

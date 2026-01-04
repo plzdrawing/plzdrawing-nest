@@ -35,7 +35,11 @@ export class MemberController {
   @Post('profile')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '프로필 업로드' })
   @ApiResponse({

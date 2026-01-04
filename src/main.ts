@@ -4,6 +4,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ClassSerializerInterceptor } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,6 +13,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   app.useGlobalPipes(
     new ValidationPipe({
