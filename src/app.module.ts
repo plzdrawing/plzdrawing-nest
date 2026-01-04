@@ -31,7 +31,7 @@ import { ReviewModule } from './review/review.module';
         database: configService.get<string>('DB_DATABASE'),
         autoLoadEntities: true,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false,
+        synchronize: configService.get<boolean>('DB_SYNCHRONIZE'),
         logging: true,
       }),
     }),
