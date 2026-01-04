@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: plzdrawing-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      # AWS RDS를 사용하므로 DB_HOST는 .env의 값을 그대로 사용합니다.
+      # Redis는 아래 정의된 컨테이너를 사용하므로 호스트명을 'redis'로 덮어씁니다.
+      - REDIS_HOST=redis
+      - NODE_ENV=production
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: always
+
+  # MySQL 서비스 제거 (AWS RDS 사용)
+
+  redis:
+    image: redis:alpine
+    container_name: plzdrawing-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  redis-data:
