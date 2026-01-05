@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   Column,
   Entity,
@@ -18,15 +19,23 @@ import { ChatRoom } from './chat-room.entity';
 
 @Entity('post')
 export class Post extends BaseEntity {
+  @ApiProperty({ description: '게시글 ID', example: 1 })
   @PrimaryGeneratedColumn()
   id: number;
 
+  @ApiProperty({ description: '작성자 ID', example: 1 })
   @Column({ name: 'member_id' })
   memberId: number;
 
+  @ApiProperty({ description: '제목', example: '그림 그려주세요' })
   @Column({ nullable: true })
   title: string;
 
+  @ApiProperty({
+    description: '카테고리',
+    enum: PostCategory,
+    example: PostCategory.REQUEST,
+  })
   @Column({
     type: 'enum',
     enum: PostCategory,
@@ -34,9 +43,14 @@ export class Post extends BaseEntity {
   })
   category: PostCategory;
 
+  @ApiProperty({ description: '내용', example: '상세 내용입니다.' })
   @Column({ type: 'text', nullable: true })
   content: string;
 
+  @ApiProperty({
+    description: '썸네일 URL',
+    example: 'https://example.com/image.jpg',
+  })
   @Column({ name: 'thumbnail_url', nullable: true })
   thumbnailUrl: string;
 

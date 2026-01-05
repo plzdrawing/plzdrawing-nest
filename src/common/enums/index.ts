@@ -25,6 +25,7 @@ export enum TagStatus {
 }
 
 export enum PostCategory {
+  REQUEST = 'REQUEST',
   DRAWING = 'DRAWING',
   ACCOUNT = 'ACCOUNT',
   PAYMENT = 'PAYMENT',

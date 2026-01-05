@@ -27,6 +27,8 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { LatestContentsPageResponseDto } from './dto/latest-contents-page-response.dto';
 import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
 
+import { Post as PostEntity } from '../entities/post.entity';
+
 @ApiTags('Post')
 @Controller('posts')
 export class PostController {
@@ -42,7 +44,11 @@ export class PostController {
   )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '게시글 작성' })
-  @ApiResponse({ status: 201, description: '게시글 작성 성공' })
+  @ApiResponse({
+    status: 201,
+    description: '게시글 작성 성공',
+    type: PostEntity,
+  })
   @ApiResponse({ status: 400, description: '잘못된 요청 (이미지 누락 등)' })
   @ApiBody({
     schema: {
