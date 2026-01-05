@@ -14,6 +14,8 @@ services:
       # AWS RDS를 사용하므로 DB_HOST는 .env의 값을 그대로 사용합니다.
       # Redis는 아래 정의된 컨테이너를 사용하므로 호스트명을 'redis'로 덮어씁니다.
       - REDIS_HOST=redis
+      - DB_SYNCHRONIZE=true
+      - TYPEORM_SYNCHRONIZE=true
       - NODE_ENV=production
     depends_on:
       - redis
