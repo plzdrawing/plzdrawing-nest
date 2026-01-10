@@ -1,5 +1,6 @@
 import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class UpsertProfileDto {
   @ApiPropertyOptional({ description: '자기소개', example: '안녕하세요.' })
@@ -11,6 +12,12 @@ export class UpsertProfileDto {
   @ApiPropertyOptional({
     description: '관심 태그 목록',
     example: ['그림', '일러스트'],
+  })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return value.split(',').map((v) => v.trim());
+    }
+    return value;
   })
   @IsArray()
   @IsOptional()
