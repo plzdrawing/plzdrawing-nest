@@ -17,6 +17,7 @@ import * as path from 'path';
         // 절대 경로로 변환
         const absolutePath = path.resolve(process.cwd(), firebaseConfigPath);
 
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const serviceAccount = require(absolutePath);
 
         return admin.initializeApp({
