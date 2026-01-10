@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: plzdrawing-server
+    image: ${DOCKER_USERNAME}/plzdrawing-nest:latest
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - DB_SYNCHRONIZE=false
+      - TYPEORM_SYNCHRONIZE=false
+      - NODE_ENV=production
+    depends_on:
+      - redis
+    networks:
+      - app-network
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: plzdrawing-redis
+    networks:
+      - app-network
+    restart: always
+
+networks:
+  app-network:
+    driver: bridge

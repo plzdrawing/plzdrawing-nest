@@ -1,0 +1,79 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: ['main']
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/plzdrawing-nest:latest
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Copy docker-compose.prod.yml to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: 'docker-compose.prod.yml'
+          target: '/home/${{ secrets.EC2_USERNAME }}/plzdrawing-nest'
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # 디렉토리 이동 (없으면 생성)
+            mkdir -p /home/${{ secrets.EC2_USERNAME }}/plzdrawing-nest
+            cd /home/${{ secrets.EC2_USERNAME }}/plzdrawing-nest
+
+            # prod 파일을 docker-compose.yml로 이름 변경하여 사용하거나 -f 옵션 사용
+            mv docker-compose.prod.yml docker-compose.yml
+
+            # Docker Hub 로그인
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+            # 환경변수 파일(.env) 확인 (없으면 경고 출력)
+            if [ ! -f .env ]; then
+              echo "WARNING: .env file not found! Application might fail to start."
+              echo "Please create .env file in $(pwd) on the server."
+            fi
+
+            # DOCKER_USERNAME 환경변수 설정 (docker-compose.yml에서 사용)
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+
+            # 최신 이미지 Pull & 컨테이너 재시작
+            docker-compose pull
+            docker-compose down
+            docker-compose up -d
+            docker image prune -f
