@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, LessThan } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
@@ -22,6 +24,8 @@ import { ProfileInfoResponse } from './dto/profile-info-response.dto';
 
 @Injectable()
 export class MemberService {
+  private readonly logger = new Logger(MemberService.name);
+
   constructor(
     @InjectRepository(Member)
     private readonly memberRepository: Repository<Member>,
@@ -216,6 +220,25 @@ export class MemberService {
       const hashedPassword = await bcrypt.hash(newPassword, 10);
       member.password = hashedPassword;
       await this.memberRepository.save(member);
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleCron() {
+    this.logger.debug('Running Cron Job: Delete expired TEMP members');
+
+    // 24시간 전 (어제 이 시간)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const result = await this.memberRepository.delete({
+      role: MemberRole.ROLE_TEMP,
+      status: MemberStatus.ACTIVE,
+      createdAt: LessThan(yesterday),
+    });
+
+    if (result.affected && result.affected > 0) {
+      this.logger.log(`Deleted ${result.affected} expired TEMP members.`);
     }
   }
 }
