@@ -8,7 +8,7 @@ export class KakaoStrategy extends PassportStrategy(Strategy, 'kakao') {
   constructor(private readonly configService: ConfigService) {
     super({
       clientID: configService.get<string>('KAKAO_CLIENT_ID'),
-      callbackURL: configService.get<string>('KAKAO_CALLBACK_URL'),
+      callbackURL: configService.get<string>('KAKAO_REDIRECT_URI'),
     });
   }
 
