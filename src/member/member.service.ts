@@ -97,6 +97,11 @@ export class MemberService {
       await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
+    if (member.role === MemberRole.ROLE_TEMP) {
+      member.role = MemberRole.ROLE_MEMBER;
+      await this.memberRepository.save(member);
+    }
+
     return true;
   }
 
