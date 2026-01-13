@@ -97,12 +97,19 @@ export class AuthController {
 
   @Get('kakao')
   @UseGuards(AuthGuard('kakao'))
-  @ApiOperation({ summary: '카카오 로그인' })
+  @ApiOperation({
+    summary: '카카오 로그인 진입',
+    description: '사용자를 카카오 로그인 페이지로 리다이렉트합니다.',
+  })
   async kakaoAuth(@Request() req) {}
 
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
-  @ApiOperation({ summary: '카카오 로그인 콜백' })
+  @ApiOperation({
+    summary: '카카오 로그인 콜백',
+    description:
+      '카카오 인증 완료 후, 유저 정보를 조회하여 JWT 토큰을 발급하고 프론트엔드 URL로 리다이렉트합니다.',
+  })
   @ApiResponse({
     status: 302,
     description: '로그인 성공 후 프론트엔드로 리다이렉트',
