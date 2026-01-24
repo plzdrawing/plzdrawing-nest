@@ -9,10 +9,10 @@ import { AuthModule } from './auth/auth.module';
 import { PostModule } from './post/post.module';
 import { EmailModule } from './email/email.module';
 import { AlarmModule } from './alarm/alarm.module';
-import { AwsModule } from './common/aws/aws.module';
 import { TagModule } from './tag/tag.module';
 import { LikeModule } from './like/like.module';
 import { ReviewModule } from './review/review.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -45,6 +45,7 @@ import { ReviewModule } from './review/review.module';
     TagModule,
     LikeModule,
     ReviewModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
