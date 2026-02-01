@@ -8,6 +8,7 @@ export class ChatRoomListQueryDto extends PaginationDto {
   @ApiPropertyOptional({
     description: '채팅방 상태 필터',
     enum: ChatRoomStatus,
+    example: ChatRoomStatus.REQUESTED,
   })
   @IsOptional()
   @IsEnum(ChatRoomStatus)
