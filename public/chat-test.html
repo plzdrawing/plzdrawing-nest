@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat API Test</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        background: #f7f7f7;
+        color: #1b1b1b;
+      }
+      .container {
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e5e5e5;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      }
+      label {
+        display: block;
+        margin: 8px 0 4px;
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+      }
+      input,
+      select,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      textarea {
+        min-height: 80px;
+      }
+      button {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: none;
+        border-radius: 6px;
+        background: #2d6cdf;
+        color: #fff;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button.secondary {
+        background: #666;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      .note {
+        font-size: 12px;
+        color: #666;
+      }
+      pre {
+        background: #111;
+        color: #d4f8d4;
+        padding: 12px;
+        border-radius: 6px;
+        overflow: auto;
+        max-height: 260px;
+      }
+      .token {
+        font-size: 12px;
+        word-break: break-all;
+        background: #f0f0f0;
+        padding: 8px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Chat API Test Page</h1>
+      <p class="note">
+        This page is served from the API server to avoid CORS issues.
+      </p>
+
+      <div class="card">
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" type="text" value="" />
+        <div class="note">Default is current origin.</div>
+      </div>
+
+      <h2>Login</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>User A (Artist)</h3>
+          <label for="nicknameA">Nickname</label>
+          <input id="nicknameA" type="text" placeholder="artist" />
+          <label for="emailA">Email</label>
+          <input id="emailA" type="email" placeholder="artist@test.com" />
+          <label for="passwordA">Password</label>
+          <input id="passwordA" type="password" placeholder="pass1234" />
+          <button class="secondary" onclick="registerUser('A')">
+            Register A
+          </button>
+          <button onclick="login('A')">Login A</button>
+          <div class="note">Token A</div>
+          <div id="tokenA" class="token"></div>
+        </div>
+        <div class="card">
+          <h3>User B (Requester)</h3>
+          <label for="nicknameB">Nickname</label>
+          <input id="nicknameB" type="text" placeholder="requester" />
+          <label for="emailB">Email</label>
+          <input id="emailB" type="email" placeholder="req@test.com" />
+          <label for="passwordB">Password</label>
+          <input id="passwordB" type="password" placeholder="pass1234" />
+          <button class="secondary" onclick="registerUser('B')">
+            Register B
+          </button>
+          <button onclick="login('B')">Login B</button>
+          <div class="note">Token B</div>
+          <div id="tokenB" class="token"></div>
+        </div>
+      </div>
+
+      <h2>Post (Create by A)</h2>
+      <div class="card">
+        <label for="postTitle">Title</label>
+        <input id="postTitle" type="text" value="Chat Test Post" />
+        <label for="postContent">Content</label>
+        <textarea id="postContent">This is a test post.</textarea>
+        <label for="postCategory">Category</label>
+        <select id="postCategory">
+          <option value="REQUEST">REQUEST</option>
+          <option value="DRAWING">DRAWING</option>
+          <option value="ACCOUNT">ACCOUNT</option>
+          <option value="PAYMENT">PAYMENT</option>
+          <option value="GUIDE">GUIDE</option>
+          <option value="ETC">ETC</option>
+        </select>
+        <button onclick="createPost()">Create Post (A)</button>
+        <div class="note">Created post ID</div>
+        <div id="postIdDisplay" class="token"></div>
+      </div>
+
+      <h2>Chat Room (Create by B)</h2>
+      <div class="card">
+        <label for="chatPostId">Post ID</label>
+        <input id="chatPostId" type="number" placeholder="Post ID" />
+        <label for="chatDescription">Description</label>
+        <input id="chatDescription" type="text" value="Hello!" />
+        <label for="chatPrice">Price</label>
+        <input id="chatPrice" type="number" value="1000" />
+        <button onclick="createChatRoom()">Create Chat Room (B)</button>
+        <div class="note">Created chat room ID</div>
+        <div id="chatRoomIdDisplay" class="token"></div>
+      </div>
+
+      <h2>Messages</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Send Message</h3>
+          <label for="sendChatRoomId">Chat Room ID</label>
+          <input id="sendChatRoomId" type="number" placeholder="Chat Room ID" />
+          <label for="sendContent">Content</label>
+          <textarea id="sendContent">Hello from UI</textarea>
+          <label for="sendAs">Send As</label>
+          <select id="sendAs">
+            <option value="A">User A</option>
+            <option value="B">User B</option>
+          </select>
+          <button onclick="sendMessage()">Send</button>
+        </div>
+        <div class="card">
+          <h3>List Messages</h3>
+          <label for="listChatRoomId">Chat Room ID</label>
+          <input id="listChatRoomId" type="number" placeholder="Chat Room ID" />
+          <div class="row">
+            <div>
+              <label for="beforeId">Before ID</label>
+              <input id="beforeId" type="number" />
+            </div>
+            <div>
+              <label for="afterId">After ID</label>
+              <input id="afterId" type="number" />
+            </div>
+          </div>
+          <label for="limit">Limit</label>
+          <input id="limit" type="number" value="30" />
+          <button onclick="listMessages()">List</button>
+        </div>
+      </div>
+
+      <h2>Read</h2>
+      <div class="card">
+        <label for="readChatRoomId">Chat Room ID</label>
+        <input id="readChatRoomId" type="number" />
+        <label for="lastReadMessageId">Last Read Message ID (optional)</label>
+        <input id="lastReadMessageId" type="number" />
+        <label for="readAs">Read As</label>
+        <select id="readAs">
+          <option value="A">User A</option>
+          <option value="B">User B</option>
+        </select>
+        <button class="secondary" onclick="markAsRead()">Mark As Read</button>
+      </div>
+
+      <h2>Response Log</h2>
+      <pre id="log"></pre>
+    </div>
+
+    <script>
+      const state = {
+        baseUrl: window.location.origin,
+        tokens: { A: '', B: '' },
+        lastPostId: '',
+        lastChatRoomId: '',
+      };
+
+      const baseUrlInput = document.getElementById('baseUrl');
+      baseUrlInput.value = state.baseUrl;
+      baseUrlInput.addEventListener('change', () => {
+        state.baseUrl = baseUrlInput.value.trim().replace(/\/$/, '');
+      });
+
+      function log(message, data) {
+        const el = document.getElementById('log');
+        const entry =
+          typeof data === 'undefined'
+            ? String(message)
+            : `${message}\n${JSON.stringify(data, null, 2)}`;
+        el.textContent = `${entry}\n\n${el.textContent}`.trim();
+      }
+
+      function getToken(userKey) {
+        return state.tokens[userKey];
+      }
+
+      function setToken(userKey, token) {
+        state.tokens[userKey] = token;
+        const el = document.getElementById(userKey === 'A' ? 'tokenA' : 'tokenB');
+        el.textContent = token || '';
+      }
+
+      async function apiFetch(path, options = {}, userKey) {
+        const token = userKey ? getToken(userKey) : '';
+        const headers = options.headers || {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`${state.baseUrl}/api${path}`, {
+          ...options,
+          headers,
+        });
+        const text = await res.text();
+        let data;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = { raw: text };
+        }
+        if (!res.ok) {
+          throw { status: res.status, data };
+        }
+        return data;
+      }
+
+      async function login(userKey) {
+        try {
+          const email = document.getElementById(
+            userKey === 'A' ? 'emailA' : 'emailB',
+          ).value;
+          const password = document.getElementById(
+            userKey === 'A' ? 'passwordA' : 'passwordB',
+          ).value;
+          if (!email || !password) {
+            log(`Login ${userKey} failed`, { error: 'Email/password required' });
+            return;
+          }
+          const data = await apiFetch(
+            '/auth/login',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            },
+            null,
+          );
+          setToken(userKey, data.access_token || '');
+          log(`Login ${userKey} success`, data);
+        } catch (err) {
+          log(`Login ${userKey} failed`, err);
+        }
+      }
+
+      async function registerUser(userKey) {
+        try {
+          const nickname = document.getElementById(
+            userKey === 'A' ? 'nicknameA' : 'nicknameB',
+          ).value;
+          const email = document.getElementById(
+            userKey === 'A' ? 'emailA' : 'emailB',
+          ).value;
+          const password = document.getElementById(
+            userKey === 'A' ? 'passwordA' : 'passwordB',
+          ).value;
+          if (!nickname || !email || !password) {
+            log(`Register ${userKey} failed`, {
+              error: 'Nickname/email/password required',
+            });
+            return;
+          }
+          const data = await apiFetch(
+            '/auth/register',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ nickname, email, password }),
+            },
+            null,
+          );
+          log(`Register ${userKey} success`, data);
+        } catch (err) {
+          log(`Register ${userKey} failed`, err);
+        }
+      }
+
+      async function createPost() {
+        try {
+          const form = new FormData();
+          form.append('title', document.getElementById('postTitle').value);
+          form.append('content', document.getElementById('postContent').value);
+          form.append('category', document.getElementById('postCategory').value);
+          const data = await apiFetch(
+            '/posts',
+            { method: 'POST', body: form },
+            'A',
+          );
+          state.lastPostId = data.id;
+          document.getElementById('postIdDisplay').textContent = data.id;
+          document.getElementById('chatPostId').value = data.id;
+          log('Post created', data);
+        } catch (err) {
+          log('Post creation failed', err);
+        }
+      }
+
+      async function createChatRoom() {
+        try {
+          const postId = Number(document.getElementById('chatPostId').value);
+          const description = document.getElementById('chatDescription').value;
+          const price = Number(document.getElementById('chatPrice').value || 0);
+          const data = await apiFetch(
+            '/chats',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ postId, description, price }),
+            },
+            'B',
+          );
+          const chatRoomId = data.chatRoom?.chatRoomId || data.chatRoomId;
+          state.lastChatRoomId = chatRoomId;
+          document.getElementById('chatRoomIdDisplay').textContent = chatRoomId;
+          document.getElementById('sendChatRoomId').value = chatRoomId;
+          document.getElementById('listChatRoomId').value = chatRoomId;
+          document.getElementById('readChatRoomId').value = chatRoomId;
+          log('Chat room created', data);
+        } catch (err) {
+          log('Chat room creation failed', err);
+        }
+      }
+
+      async function sendMessage() {
+        try {
+          const chatRoomId = Number(
+            document.getElementById('sendChatRoomId').value,
+          );
+          const content = document.getElementById('sendContent').value;
+          const userKey = document.getElementById('sendAs').value;
+          const data = await apiFetch(
+            `/chats/${chatRoomId}/messages`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ content }),
+            },
+            userKey,
+          );
+          log('Message sent', data);
+        } catch (err) {
+          log('Send message failed', err);
+        }
+      }
+
+      async function listMessages() {
+        try {
+          const chatRoomId = Number(
+            document.getElementById('listChatRoomId').value,
+          );
+          const beforeId = document.getElementById('beforeId').value;
+          const afterId = document.getElementById('afterId').value;
+          const limit = document.getElementById('limit').value;
+          const params = new URLSearchParams();
+          if (beforeId) params.set('beforeId', beforeId);
+          if (afterId) params.set('afterId', afterId);
+          if (limit) params.set('limit', limit);
+          const data = await apiFetch(
+            `/chats/${chatRoomId}/messages?${params.toString()}`,
+            { method: 'GET' },
+            'A',
+          );
+          log('Messages', data);
+        } catch (err) {
+          log('List messages failed', err);
+        }
+      }
+
+      async function markAsRead() {
+        try {
+          const chatRoomId = Number(
+            document.getElementById('readChatRoomId').value,
+          );
+          const lastReadMessageId = document.getElementById(
+            'lastReadMessageId',
+          ).value;
+          const userKey = document.getElementById('readAs').value;
+          const body = {};
+          if (lastReadMessageId) body.lastReadMessageId = Number(lastReadMessageId);
+          const data = await apiFetch(
+            `/chats/${chatRoomId}/read`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            },
+            userKey,
+          );
+          log('Marked as read', data);
+        } catch (err) {
+          log('Mark as read failed', err);
+        }
+      }
+    </script>
+  </body>
+</html>

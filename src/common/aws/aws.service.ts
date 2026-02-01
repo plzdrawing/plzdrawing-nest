@@ -39,7 +39,6 @@ export class AwsService {
           Key: fileName,
           Body: file.buffer,
           ContentType: file.mimetype,
-          // ACL: 'public-read', // 버킷 설정에 따라 필요할 수 있음
         }),
       );
 
