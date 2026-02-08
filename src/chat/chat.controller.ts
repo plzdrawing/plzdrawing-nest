@@ -6,16 +6,12 @@ import {
   Patch,
   Post,
   Query,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
   ApiBody,
-  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiResponse,
@@ -28,6 +24,8 @@ import { CreateChatRoomDto } from './dto/create-chat-room.dto';
 import { UpdateChatRoomStatusDto } from './dto/update-chat-room-status.dto';
 import { ChatRoomListQueryDto } from './dto/chat-room-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { ChatImageUploadRequestDto } from './dto/chat-image-upload-request.dto';
+import { ChatImageUploadResponseDto } from './dto/chat-image-upload-response.dto';
 import { MessageListQueryDto } from './dto/message-list-query.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
 import { ChatRoomCreateResponseDto } from './dto/chat-room-create-response.dto';
@@ -191,16 +189,28 @@ export class ChatController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '텍스트 메시지 전송',
-    description: '텍스트 메시지를 전송하고 채팅방 updatedAt을 갱신합니다.',
+    summary: '메시지 전송',
+    description:
+      '텍스트 또는 이미지 메시지를 전송하고 채팅방 updatedAt을 갱신합니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
   @ApiBody({
     type: SendMessageDto,
     examples: {
-      default: {
+      text: {
         summary: '텍스트 메시지 전송',
-        value: { content: '안녕하세요 :)' },
+        value: { type: 'TEXT', content: '안녕하세요 :)' },
+      },
+      image: {
+        summary: '이미지 메시지 전송',
+        value: {
+          type: 'IMAGE',
+          objectKey: 'chat/12/2026/02/uuid.png',
+          size: 5242880,
+          mimeType: 'image/png',
+          width: 1200,
+          height: 900,
+        },
       },
     },
   })
@@ -209,6 +219,7 @@ export class ChatController {
     description: '메시지 전송 성공',
     type: MessageResponseDto,
   })
+  @ApiResponse({ status: 400, description: '잘못된 요청' })
   @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
   @ApiResponse({ status: 404, description: '채팅방을 찾을 수 없음' })
@@ -220,25 +231,34 @@ export class ChatController {
     return this.chatService.sendMessage(member, +id, dto);
   }
 
-  @Post(':id/messages/image')
+  @Post(':id/messages/image-upload')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
-  @UseInterceptors(
-    FileInterceptor('image', {
-      limits: { fileSize: 10 * 1024 * 1024 },
-    }),
-  )
-  @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: '이미지 메시지 전송',
     description:
       '이미지 파일(필수)을 업로드하여 IMAGE 타입 메시지를 전송합니다. 파일 최대 크기는 10MB입니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({
+    type: ChatImageUploadRequestDto,
+    examples: {
+      default: {
+        summary: '업로드 준비 요청',
+        value: {
+          fileName: 'dog.png',
+          contentType: 'image/png',
+          size: 5242880,
+          width: 1200,
+          height: 900,
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
-    description: '이미지 메시지 전송 성공',
-    type: MessageResponseDto,
+    description: '업로드 URL 발급 성공',
+    type: ChatImageUploadResponseDto,
   })
   @ApiResponse({ status: 400, description: '이미지 파일 누락' })
   @ApiResponse({ status: 413, description: '파일 크기 초과 (최대 10MB)' })
@@ -261,9 +281,9 @@ export class ChatController {
   async sendImageMessage(
     @GetUser() member: Member,
     @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-  ): Promise<MessageResponseDto> {
-    return this.chatService.sendImageMessage(member, +id, file);
+    @Body() dto: ChatImageUploadRequestDto,
+  ): Promise<ChatImageUploadResponseDto> {
+    return this.chatService.createImageUpload(member, +id, dto);
   }
 
   @Patch(':id/read')

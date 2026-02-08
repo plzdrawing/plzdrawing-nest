@@ -4,20 +4,30 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository, Not } from 'typeorm';
+import * as path from 'path';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { ChatRoomStatus, MessageType } from '../common/enums';
+import {
+  CHAT_IMAGE_ALLOWED_CONTENT_TYPES,
+  CHAT_IMAGE_DOWNLOAD_EXPIRES_IN_SECONDS,
+  CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS,
+  MAX_CHAT_IMAGE_SIZE_BYTES,
+} from './chat.constants';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
 import { UpdateChatRoomStatusDto } from './dto/update-chat-room-status.dto';
 import { ChatRoomListQueryDto } from './dto/chat-room-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { MessageListQueryDto } from './dto/message-list-query.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
+import { ChatImageUploadRequestDto } from './dto/chat-image-upload-request.dto';
+import { ChatImageUploadResponseDto } from './dto/chat-image-upload-response.dto';
 import { ChatRoomCreateResponseDto } from './dto/chat-room-create-response.dto';
 import { ChatRoomDetailResponseDto } from './dto/chat-room-detail-response.dto';
 import { ChatRoomListResponseDto } from './dto/chat-room-list-response.dto';
@@ -199,6 +209,36 @@ export class ChatService {
     return this.mapChatRoomDetail(chatRoom);
   }
 
+  async createImageUpload(
+    member: Member,
+    chatRoomId: number,
+    dto: ChatImageUploadRequestDto,
+  ): Promise<ChatImageUploadResponseDto> {
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { id: chatRoomId },
+    });
+    if (!chatRoom) throw new NotFoundException('Chat room not found');
+    this.assertMember(chatRoom, member.id);
+
+    this.assertImageUpload(dto);
+
+    const objectKey = this.buildImageObjectKey(
+      chatRoom.id,
+      dto.fileName,
+      dto.contentType,
+    );
+    const uploadUrl = await this.awsService.createPresignedUploadUrl(
+      objectKey,
+      dto.contentType,
+      CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS,
+    );
+    const expiresAt = new Date(
+      Date.now() + CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS * 1000,
+    ).toISOString();
+
+    return { uploadUrl, objectKey, expiresAt };
+  }
+
   async getMessages(
     member: Member,
     chatRoomId: number,
@@ -233,7 +273,10 @@ export class ChatService {
     const messages = await qb.getMany();
     const ordered = afterId ? messages : messages.reverse();
 
-    return { data: ordered.map((message) => this.mapMessage(message)) };
+    const data = await Promise.all(
+      ordered.map((message) => this.mapMessage(message)),
+    );
+    return { data };
   }
 
   async sendMessage(
@@ -247,37 +290,37 @@ export class ChatService {
     if (!chatRoom) throw new NotFoundException('Chat room not found');
     this.assertMember(chatRoom, member.id);
 
+    const type = dto.type ?? MessageType.TEXT;
+    if (type === MessageType.SYSTEM) {
+      throw new BadRequestException('Unsupported message type');
+    }
+
+    if (type === MessageType.TEXT) {
+      if (!dto.content || dto.content.trim().length === 0) {
+        throw new BadRequestException('Message content is required');
+      }
+    } else if (type === MessageType.IMAGE) {
+      if (!dto.objectKey) {
+        throw new BadRequestException('objectKey is required');
+      }
+      this.assertImageObjectKey(dto.objectKey, chatRoom.id);
+      if (
+        dto.mimeType &&
+        !CHAT_IMAGE_ALLOWED_CONTENT_TYPES.includes(dto.mimeType)
+      ) {
+        throw new BadRequestException('Unsupported image content type');
+      }
+      if (dto.size && dto.size > MAX_CHAT_IMAGE_SIZE_BYTES) {
+        throw new BadRequestException('Image is too large');
+      }
+    }
+
     const message = this.messageRepository.create({
       chatRoomId: chatRoom.id,
       senderId: member.id,
-      type: MessageType.TEXT,
-      content: dto.content,
-    });
-    const saved = await this.messageRepository.save(message);
-    await this.touchChatRoom(chatRoom.id);
-
-    return this.mapMessage(saved);
-  }
-
-  async sendImageMessage(
-    member: Member,
-    chatRoomId: number,
-    file: Express.Multer.File,
-  ): Promise<MessageResponseDto> {
-    if (!file) throw new BadRequestException('이미지 파일이 필요합니다.');
-
-    const chatRoom = await this.chatRoomRepository.findOne({
-      where: { id: chatRoomId },
-    });
-    if (!chatRoom) throw new NotFoundException('Chat room not found');
-    this.assertMember(chatRoom, member.id);
-
-    const imageUrl = await this.awsService.uploadFile(file, 'chat');
-    const message = this.messageRepository.create({
-      chatRoomId: chatRoom.id,
-      senderId: member.id,
-      type: MessageType.IMAGE,
-      imageUrl,
+      type,
+      content: type === MessageType.TEXT ? dto.content : null,
+      imageUrl: type === MessageType.IMAGE ? dto.objectKey : null,
     });
     const saved = await this.messageRepository.save(message);
     await this.touchChatRoom(chatRoom.id);
@@ -384,6 +427,10 @@ export class ChatService {
       },
     });
 
+    const lastMessageDto = lastMessage
+      ? await this.mapLastMessage(lastMessage)
+      : undefined;
+
     return {
       chatRoomId: chatRoom.id,
       postId: chatRoom.postId,
@@ -391,7 +438,7 @@ export class ChatService {
       thumbnailUrl: chatRoom.post?.thumbnailUrl ?? undefined,
       status: chatRoom.status,
       counterpart: this.mapUser(counterpart),
-      lastMessage: lastMessage ? this.mapLastMessage(lastMessage) : undefined,
+      lastMessage: lastMessageDto,
       unreadCount,
       price: chatRoom.price ?? undefined,
       paidAmount: chatRoom.paidAmount ?? undefined,
@@ -415,26 +462,97 @@ export class ChatService {
     };
   }
 
-  private mapLastMessage(message: Message): LastMessageDto {
+  private async mapLastMessage(message: Message): Promise<LastMessageDto> {
+    const imageUrl = await this.resolveMessageImageUrl(message);
     return {
       id: message.id,
       type: message.type,
       content: message.content ?? undefined,
-      imageUrl: message.imageUrl ?? undefined,
+      imageUrl,
       sentAt: message.sentAt,
     };
   }
 
-  private mapMessage(message: Message): MessageResponseDto {
+  private async mapMessage(message: Message): Promise<MessageResponseDto> {
+    const imageUrl = await this.resolveMessageImageUrl(message);
     return {
       id: message.id,
       chatRoomId: message.chatRoomId,
       senderId: message.senderId,
       type: message.type,
       content: message.content ?? undefined,
-      imageUrl: message.imageUrl ?? undefined,
+      imageUrl,
       isRead: message.isRead,
       sentAt: message.sentAt,
     };
+  }
+
+  private assertImageUpload(dto: ChatImageUploadRequestDto): void {
+    if (!CHAT_IMAGE_ALLOWED_CONTENT_TYPES.includes(dto.contentType)) {
+      throw new BadRequestException('Unsupported image content type');
+    }
+    if (dto.size > MAX_CHAT_IMAGE_SIZE_BYTES) {
+      throw new BadRequestException('Image is too large');
+    }
+  }
+
+  private buildImageObjectKey(
+    chatRoomId: number,
+    fileName: string,
+    contentType: string,
+  ): string {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const ext = this.resolveImageExtension(fileName, contentType);
+    return `chat/${chatRoomId}/${year}/${month}/${randomUUID()}${ext}`;
+  }
+
+  private resolveImageExtension(fileName: string, contentType: string): string {
+    const extFromType = this.getImageExtension(contentType);
+    if (!extFromType) {
+      throw new BadRequestException('Unsupported image content type');
+    }
+    const extFromName = path.extname(fileName).toLowerCase();
+    if (extFromName && extFromName !== extFromType) {
+      return extFromType;
+    }
+    return extFromType;
+  }
+
+  private getImageExtension(contentType: string): string {
+    switch (contentType) {
+      case 'image/jpeg':
+        return '.jpg';
+      case 'image/png':
+        return '.png';
+      case 'image/webp':
+        return '.webp';
+      default:
+        return '';
+    }
+  }
+
+  private assertImageObjectKey(objectKey: string, chatRoomId: number): void {
+    const expectedPrefix = `chat/${chatRoomId}/`;
+    if (!objectKey.startsWith(expectedPrefix) || objectKey.includes('..')) {
+      throw new BadRequestException('Invalid object key');
+    }
+  }
+
+  private async resolveMessageImageUrl(
+    message: Message,
+  ): Promise<string | undefined> {
+    if (!message.imageUrl) return undefined;
+    if (message.type !== MessageType.IMAGE) return message.imageUrl;
+    if (this.isAbsoluteUrl(message.imageUrl)) return message.imageUrl;
+    return this.awsService.createPresignedGetUrl(
+      message.imageUrl,
+      CHAT_IMAGE_DOWNLOAD_EXPIRES_IN_SECONDS,
+    );
+  }
+
+  private isAbsoluteUrl(value: string): boolean {
+    return value.startsWith('http://') || value.startsWith('https://');
   }
 }

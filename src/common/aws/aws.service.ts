@@ -4,7 +4,9 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as path from 'path';
 
 @Injectable()
@@ -48,6 +50,31 @@ export class AwsService {
       console.error('S3 Upload Error:', error);
       throw new BadRequestException('이미지 업로드에 실패했습니다.');
     }
+  }
+
+  createPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    expiresInSeconds = 300,
+  ): Promise<string> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      ContentType: contentType,
+    });
+    return getSignedUrl(this.s3Client as any, command, {
+      expiresIn: expiresInSeconds,
+    });
+  }
+
+  createPresignedGetUrl(key: string, expiresInSeconds = 600): Promise<string> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+    });
+    return getSignedUrl(this.s3Client as any, command, {
+      expiresIn: expiresInSeconds,
+    });
   }
 
   async uploadFiles(
