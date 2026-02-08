@@ -43,18 +43,24 @@ export class PostController {
     }),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: '게시글 작성' })
+  @ApiOperation({
+    summary: '게시글 작성',
+    description:
+      '게시글과 이미지를 함께 업로드합니다. images는 선택이며 최대 5개, 파일당 최대 10MB입니다.',
+  })
   @ApiResponse({
     status: 201,
     description: '게시글 작성 성공',
     type: PostEntity,
   })
-  @ApiResponse({ status: 400, description: '잘못된 요청 (이미지 누락 등)' })
+  @ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검사 실패 등)' })
+  @ApiResponse({ status: 413, description: '파일 크기 초과 (파일당 최대 10MB)' })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
         images: {
+          description: '업로드 이미지 목록(선택), 최대 5개, 파일당 최대 10MB',
           type: 'array',
           items: {
             type: 'string',

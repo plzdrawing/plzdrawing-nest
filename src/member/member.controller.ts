@@ -41,18 +41,24 @@ export class MemberController {
     }),
   )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: '프로필 업로드' })
+  @ApiOperation({
+    summary: '프로필 업로드',
+    description:
+      '프로필 정보를 업로드합니다. file은 선택이며 업로드 시 파일 최대 크기는 5MB입니다.',
+  })
   @ApiResponse({
     status: 201,
     description: '프로필 업로드 성공',
     type: Boolean,
   })
-  @ApiResponse({ status: 400, description: '잘못된 요청 (파일 형식 오류 등)' })
+  @ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검사 실패 등)' })
+  @ApiResponse({ status: 413, description: '파일 크기 초과 (최대 5MB)' })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
         file: {
+          description: '프로필 이미지 파일(선택), 최대 5MB',
           type: 'string',
           format: 'binary',
         },
@@ -79,19 +85,29 @@ export class MemberController {
   @Patch('v1/profile')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB 제한
+    }),
+  )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: '프로필 수정' })
+  @ApiOperation({
+    summary: '프로필 수정',
+    description:
+      '프로필 정보를 수정합니다. file은 선택이며 업로드 시 파일 최대 크기는 5MB입니다.',
+  })
   @ApiResponse({ status: 200, description: '프로필 수정 성공', type: Boolean })
   @ApiResponse({
     status: 400,
     description: '잘못된 요청 (유효성 검사 실패 등)',
   })
+  @ApiResponse({ status: 413, description: '파일 크기 초과 (최대 5MB)' })
   @ApiBody({
     schema: {
       type: 'object',
       properties: {
         file: {
+          description: '프로필 이미지 파일(선택), 최대 5MB',
           type: 'string',
           format: 'binary',
         },
