@@ -3,222 +3,405 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat API Test</title>
+    <title>Chat Image Test Lab</title>
     <style>
       :root {
         color-scheme: light;
+        --bg: #f1f5f8;
+        --card: #ffffff;
+        --line: #d5dde5;
+        --text: #132033;
+        --muted: #5f6c7a;
+        --brand: #0f6ab8;
+        --brand-dark: #0a4c85;
+        --accent: #0f8b7e;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
-        font-family: Arial, sans-serif;
-        margin: 20px;
-        background: #f7f7f7;
-        color: #1b1b1b;
+        margin: 0;
+        background:
+          radial-gradient(circle at 20% 0%, #dce9f5 0, transparent 35%),
+          radial-gradient(circle at 80% 0%, #d8f3ee 0, transparent 35%),
+          var(--bg);
+        color: var(--text);
+        font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
       }
       .container {
-        max-width: 980px;
+        max-width: 1200px;
         margin: 0 auto;
+        padding: 28px 16px 36px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      h2 {
+        margin: 24px 0 10px;
+        font-size: 20px;
+      }
+      h3 {
+        margin: 0 0 8px;
+        font-size: 17px;
+      }
+      .note {
+        color: var(--muted);
+        font-size: 13px;
       }
       .grid {
         display: grid;
+        gap: 14px;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 16px;
       }
       .card {
-        background: #fff;
-        border: 1px solid #e5e5e5;
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 3px 10px rgba(8, 30, 52, 0.06);
       }
       label {
         display: block;
-        margin: 8px 0 4px;
-        font-weight: 600;
+        margin: 10px 0 4px;
         font-size: 12px;
+        font-weight: 700;
+        color: #30465e;
         text-transform: uppercase;
-        letter-spacing: 0.02em;
+        letter-spacing: 0.03em;
       }
       input,
-      select,
-      textarea {
+      textarea,
+      select {
         width: 100%;
-        box-sizing: border-box;
-        padding: 8px 10px;
-        border: 1px solid #ccc;
-        border-radius: 6px;
         font-size: 14px;
+        padding: 9px 10px;
+        border: 1px solid #bec9d4;
+        border-radius: 8px;
+        outline: none;
+        background: #fcfdff;
       }
       textarea {
-        min-height: 80px;
+        min-height: 72px;
+        resize: vertical;
       }
-      button {
-        margin-top: 10px;
-        padding: 10px 12px;
-        border: none;
-        border-radius: 6px;
-        background: #2d6cdf;
-        color: #fff;
-        cursor: pointer;
-        font-size: 14px;
-      }
-      button.secondary {
-        background: #666;
+      input:focus,
+      textarea:focus,
+      select:focus {
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px rgba(15, 106, 184, 0.12);
       }
       .row {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
       }
       .row > * {
-        flex: 1;
+        flex: 1 1 180px;
       }
-      .note {
-        font-size: 12px;
-        color: #666;
+      button {
+        border: none;
+        background: var(--brand);
+        color: #fff;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
       }
-      pre {
-        background: #111;
-        color: #d4f8d4;
-        padding: 12px;
-        border-radius: 6px;
-        overflow: auto;
-        max-height: 260px;
+      button:hover {
+        background: var(--brand-dark);
+      }
+      button.secondary {
+        background: #4f6275;
+      }
+      button.ghost {
+        background: #eef3f8;
+        color: #324458;
       }
       .token {
         font-size: 12px;
-        word-break: break-all;
-        background: #f0f0f0;
+        color: #2d3f53;
+        background: #f0f5fa;
+        border: 1px dashed #bac7d5;
+        border-radius: 8px;
         padding: 8px;
-        border-radius: 6px;
+        min-height: 40px;
+        word-break: break-all;
+      }
+      .viewer-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      }
+      .messages {
+        border: 1px solid #d8e1eb;
+        background: #fbfdff;
+        border-radius: 10px;
+        min-height: 280px;
+        max-height: 430px;
+        overflow: auto;
+        padding: 10px;
+      }
+      .message-item {
+        border: 1px solid #d7e3f0;
+        border-radius: 10px;
+        background: #fff;
+        padding: 8px;
+      }
+      .message-item + .message-item {
+        margin-top: 8px;
+      }
+      .message-meta {
+        font-size: 12px;
+        color: #4f6176;
+        margin-bottom: 6px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: #fff;
+      }
+      .badge.TEXT {
+        background: #4f6275;
+      }
+      .badge.IMAGE {
+        background: var(--accent);
+      }
+      .badge.SYSTEM {
+        background: #8b5a2b;
+      }
+      .message-body {
+        font-size: 14px;
+        color: #24374b;
+        white-space: pre-wrap;
+      }
+      .message-image {
+        margin-top: 8px;
+      }
+      .message-image img {
+        width: 100%;
+        max-height: 240px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #d8e2ec;
+      }
+      .image-link {
+        display: inline-block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--brand);
+      }
+      pre {
+        margin-top: 10px;
+        background: #09131d;
+        color: #d8f8e3;
+        border-radius: 10px;
+        padding: 12px;
+        max-height: 280px;
+        overflow: auto;
+        font-size: 12px;
+      }
+      .flow {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #3f5166;
+      }
+      .flow code {
+        color: #0a4f8a;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>Chat API Test Page</h1>
+      <h1>Chat Image Test Lab</h1>
       <p class="note">
-        This page is served from the API server to avoid CORS issues.
+        Same-origin page for end-to-end test: login/register, create chat room,
+        send image, and verify the other user can load it.
       </p>
 
       <div class="card">
         <label for="baseUrl">Base URL</label>
-        <input id="baseUrl" type="text" value="" />
-        <div class="note">Default is current origin.</div>
+        <input id="baseUrl" type="text" />
+        <div class="flow">
+          Quick flow:
+          <code>Register/Login A -> Register/Login B -> Create Post (A) -> Create
+          Chat Room (B) -> Send Image -> Refresh Viewer A/B</code>
+        </div>
       </div>
 
-      <h2>Login</h2>
+      <h2>1) Login</h2>
       <div class="grid">
         <div class="card">
-          <h3>User A (Artist)</h3>
+          <h3>User A (artist)</h3>
           <label for="nicknameA">Nickname</label>
-          <input id="nicknameA" type="text" placeholder="artist" />
+          <input id="nicknameA" type="text" placeholder="artist01" />
           <label for="emailA">Email</label>
-          <input id="emailA" type="email" placeholder="artist@test.com" />
+          <input id="emailA" type="email" placeholder="artist01@test.com" />
           <label for="passwordA">Password</label>
           <input id="passwordA" type="password" placeholder="pass1234" />
-          <button class="secondary" onclick="registerUser('A')">
-            Register A
-          </button>
-          <button onclick="login('A')">Login A</button>
-          <div class="note">Token A</div>
+          <div class="row">
+            <button class="secondary" onclick="registerUser('A')">Register A</button>
+            <button onclick="login('A')">Login A</button>
+          </div>
+          <label>Token A</label>
           <div id="tokenA" class="token"></div>
         </div>
         <div class="card">
-          <h3>User B (Requester)</h3>
+          <h3>User B (requester)</h3>
           <label for="nicknameB">Nickname</label>
-          <input id="nicknameB" type="text" placeholder="requester" />
+          <input id="nicknameB" type="text" placeholder="requester01" />
           <label for="emailB">Email</label>
-          <input id="emailB" type="email" placeholder="req@test.com" />
+          <input id="emailB" type="email" placeholder="requester01@test.com" />
           <label for="passwordB">Password</label>
           <input id="passwordB" type="password" placeholder="pass1234" />
-          <button class="secondary" onclick="registerUser('B')">
-            Register B
-          </button>
-          <button onclick="login('B')">Login B</button>
-          <div class="note">Token B</div>
+          <div class="row">
+            <button class="secondary" onclick="registerUser('B')">Register B</button>
+            <button onclick="login('B')">Login B</button>
+          </div>
+          <label>Token B</label>
           <div id="tokenB" class="token"></div>
         </div>
       </div>
 
-      <h2>Post (Create by A)</h2>
-      <div class="card">
-        <label for="postTitle">Title</label>
-        <input id="postTitle" type="text" value="Chat Test Post" />
-        <label for="postContent">Content</label>
-        <textarea id="postContent">This is a test post.</textarea>
-        <label for="postCategory">Category</label>
-        <select id="postCategory">
-          <option value="REQUEST">REQUEST</option>
-          <option value="DRAWING">DRAWING</option>
-          <option value="ACCOUNT">ACCOUNT</option>
-          <option value="PAYMENT">PAYMENT</option>
-          <option value="GUIDE">GUIDE</option>
-          <option value="ETC">ETC</option>
-        </select>
-        <button onclick="createPost()">Create Post (A)</button>
-        <div class="note">Created post ID</div>
-        <div id="postIdDisplay" class="token"></div>
-      </div>
-
-      <h2>Chat Room (Create by B)</h2>
-      <div class="card">
-        <label for="chatPostId">Post ID</label>
-        <input id="chatPostId" type="number" placeholder="Post ID" />
-        <label for="chatDescription">Description</label>
-        <input id="chatDescription" type="text" value="Hello!" />
-        <label for="chatPrice">Price</label>
-        <input id="chatPrice" type="number" value="1000" />
-        <button onclick="createChatRoom()">Create Chat Room (B)</button>
-        <div class="note">Created chat room ID</div>
-        <div id="chatRoomIdDisplay" class="token"></div>
-      </div>
-
-      <h2>Messages</h2>
+      <h2>2) Setup Chat</h2>
       <div class="grid">
         <div class="card">
-          <h3>Send Message</h3>
+          <h3>Create Post (A)</h3>
+          <label for="postTitle">Title</label>
+          <input id="postTitle" type="text" value="Image Chat Test Post" />
+          <label for="postContent">Content</label>
+          <textarea id="postContent">Please test image upload in this room.</textarea>
+          <label for="postCategory">Category</label>
+          <select id="postCategory">
+            <option value="REQUEST">REQUEST</option>
+            <option value="DRAWING">DRAWING</option>
+            <option value="ACCOUNT">ACCOUNT</option>
+            <option value="PAYMENT">PAYMENT</option>
+            <option value="GUIDE">GUIDE</option>
+            <option value="ETC">ETC</option>
+          </select>
+          <button onclick="createPost()">Create Post</button>
+          <label>Latest Post ID</label>
+          <div id="postIdDisplay" class="token"></div>
+        </div>
+
+        <div class="card">
+          <h3>Create Chat Room (B)</h3>
+          <label for="chatPostId">Post ID</label>
+          <input id="chatPostId" type="number" placeholder="post id" />
+          <label for="chatDescription">Description</label>
+          <input id="chatDescription" type="text" value="Image chat test request" />
+          <label for="chatPrice">Price</label>
+          <input id="chatPrice" type="number" value="1000" />
+          <button onclick="createChatRoom()">Create Chat Room</button>
+          <label>Latest Chat Room ID</label>
+          <div id="chatRoomIdDisplay" class="token"></div>
+        </div>
+      </div>
+
+      <h2>3) Send Message (Text / Image)</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Send Text</h3>
           <label for="sendChatRoomId">Chat Room ID</label>
-          <input id="sendChatRoomId" type="number" placeholder="Chat Room ID" />
+          <input id="sendChatRoomId" type="number" placeholder="chat room id" />
           <label for="sendContent">Content</label>
-          <textarea id="sendContent">Hello from UI</textarea>
+          <textarea id="sendContent">Hello from chat test page.</textarea>
           <label for="sendAs">Send As</label>
           <select id="sendAs">
             <option value="A">User A</option>
             <option value="B">User B</option>
           </select>
-          <button onclick="sendMessage()">Send</button>
+          <button onclick="sendTextMessage()">Send Text</button>
         </div>
+
         <div class="card">
-          <h3>List Messages</h3>
-          <label for="listChatRoomId">Chat Room ID</label>
-          <input id="listChatRoomId" type="number" placeholder="Chat Room ID" />
-          <div class="row">
-            <div>
-              <label for="beforeId">Before ID</label>
-              <input id="beforeId" type="number" />
-            </div>
-            <div>
-              <label for="afterId">After ID</label>
-              <input id="afterId" type="number" />
-            </div>
+          <h3>Send Image</h3>
+          <label for="imageChatRoomId">Chat Room ID</label>
+          <input id="imageChatRoomId" type="number" placeholder="chat room id" />
+          <label for="imageFile">Image File</label>
+          <input id="imageFile" type="file" accept="image/*" />
+          <label for="imageSendAs">Send As</label>
+          <select id="imageSendAs">
+            <option value="A">User A</option>
+            <option value="B">User B</option>
+          </select>
+          <button onclick="sendImageMessage()">Send Image</button>
+          <div class="note">
+            Uses <code>POST /api/chats/{id}/messages/image</code> with multipart
+            field name <code>image</code>.
           </div>
-          <label for="limit">Limit</label>
-          <input id="limit" type="number" value="30" />
-          <button onclick="listMessages()">List</button>
         </div>
       </div>
 
-      <h2>Read</h2>
+      <h2>4) Viewer (A/B each loads same room)</h2>
       <div class="card">
-        <label for="readChatRoomId">Chat Room ID</label>
-        <input id="readChatRoomId" type="number" />
-        <label for="lastReadMessageId">Last Read Message ID (optional)</label>
-        <input id="lastReadMessageId" type="number" />
-        <label for="readAs">Read As</label>
-        <select id="readAs">
-          <option value="A">User A</option>
-          <option value="B">User B</option>
-        </select>
-        <button class="secondary" onclick="markAsRead()">Mark As Read</button>
+        <div class="row">
+          <div>
+            <label for="viewerChatRoomId">Chat Room ID</label>
+            <input id="viewerChatRoomId" type="number" placeholder="chat room id" />
+          </div>
+          <div>
+            <label for="viewerLimit">Limit</label>
+            <input id="viewerLimit" type="number" value="30" />
+          </div>
+          <div>
+            <label for="autoRefreshSec">Auto Refresh(sec)</label>
+            <input id="autoRefreshSec" type="number" value="3" min="1" />
+          </div>
+        </div>
+        <div class="row" style="margin-top: 10px">
+          <button onclick="refreshViewer('A')">Refresh Viewer A</button>
+          <button onclick="refreshViewer('B')">Refresh Viewer B</button>
+          <button class="secondary" onclick="refreshBothViewers()">
+            Refresh Both
+          </button>
+          <button class="ghost" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+            Auto Refresh: OFF
+          </button>
+        </div>
+      </div>
+
+      <div class="viewer-grid">
+        <div class="card">
+          <h3>Viewer A (as User A)</h3>
+          <div id="viewerA" class="messages"></div>
+        </div>
+        <div class="card">
+          <h3>Viewer B (as User B)</h3>
+          <div id="viewerB" class="messages"></div>
+        </div>
+      </div>
+
+      <h2>5) Read API</h2>
+      <div class="card">
+        <div class="row">
+          <div>
+            <label for="readChatRoomId">Chat Room ID</label>
+            <input id="readChatRoomId" type="number" />
+          </div>
+          <div>
+            <label for="lastReadMessageId">Last Read Message ID (optional)</label>
+            <input id="lastReadMessageId" type="number" />
+          </div>
+          <div>
+            <label for="readAs">Read As</label>
+            <select id="readAs">
+              <option value="A">User A</option>
+              <option value="B">User B</option>
+            </select>
+          </div>
+        </div>
+        <button class="secondary" style="margin-top: 10px" onclick="markAsRead()">
+          Mark As Read
+        </button>
       </div>
 
       <h2>Response Log</h2>
@@ -227,84 +410,77 @@
 
     <script>
       const state = {
-        baseUrl: window.location.origin,
-        tokens: { A: '', B: '' },
-        lastPostId: '',
-        lastChatRoomId: '',
+        baseUrl: localStorage.getItem('chatTestBaseUrl') || window.location.origin,
+        tokens: {
+          A: localStorage.getItem('chatTestTokenA') || '',
+          B: localStorage.getItem('chatTestTokenB') || '',
+        },
+        autoRefreshTimer: null,
       };
-
-      const baseUrlInput = document.getElementById('baseUrl');
-      baseUrlInput.value = state.baseUrl;
-      baseUrlInput.addEventListener('change', () => {
-        state.baseUrl = baseUrlInput.value.trim().replace(/\/$/, '');
-      });
 
       function log(message, data) {
         const el = document.getElementById('log');
-        const entry =
+        const now = new Date().toISOString();
+        const body =
           typeof data === 'undefined'
             ? String(message)
             : `${message}\n${JSON.stringify(data, null, 2)}`;
-        el.textContent = `${entry}\n\n${el.textContent}`.trim();
+        el.textContent = `[${now}] ${body}\n\n${el.textContent}`.trim();
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
       }
 
       function getToken(userKey) {
-        return state.tokens[userKey];
+        return state.tokens[userKey] || '';
       }
 
       function setToken(userKey, token) {
-        state.tokens[userKey] = token;
-        const el = document.getElementById(userKey === 'A' ? 'tokenA' : 'tokenB');
-        el.textContent = token || '';
+        state.tokens[userKey] = token || '';
+        document.getElementById(userKey === 'A' ? 'tokenA' : 'tokenB').textContent =
+          state.tokens[userKey];
+        localStorage.setItem(
+          userKey === 'A' ? 'chatTestTokenA' : 'chatTestTokenB',
+          state.tokens[userKey],
+        );
+      }
+
+      function setSharedChatRoomId(chatRoomId) {
+        if (!chatRoomId) return;
+        document.getElementById('chatRoomIdDisplay').textContent = String(chatRoomId);
+        document.getElementById('sendChatRoomId').value = String(chatRoomId);
+        document.getElementById('imageChatRoomId').value = String(chatRoomId);
+        document.getElementById('viewerChatRoomId').value = String(chatRoomId);
+        document.getElementById('readChatRoomId').value = String(chatRoomId);
       }
 
       async function apiFetch(path, options = {}, userKey) {
+        const headers = { ...(options.headers || {}) };
         const token = userKey ? getToken(userKey) : '';
-        const headers = options.headers || {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`${state.baseUrl}/api${path}`, {
+
+        const response = await fetch(`${state.baseUrl}/api${path}`, {
           ...options,
           headers,
         });
-        const text = await res.text();
+        const text = await response.text();
         let data;
         try {
           data = text ? JSON.parse(text) : {};
-        } catch {
+        } catch (error) {
           data = { raw: text };
         }
-        if (!res.ok) {
-          throw { status: res.status, data };
+
+        if (!response.ok) {
+          throw { status: response.status, data };
         }
         return data;
-      }
-
-      async function login(userKey) {
-        try {
-          const email = document.getElementById(
-            userKey === 'A' ? 'emailA' : 'emailB',
-          ).value;
-          const password = document.getElementById(
-            userKey === 'A' ? 'passwordA' : 'passwordB',
-          ).value;
-          if (!email || !password) {
-            log(`Login ${userKey} failed`, { error: 'Email/password required' });
-            return;
-          }
-          const data = await apiFetch(
-            '/auth/login',
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password }),
-            },
-            null,
-          );
-          setToken(userKey, data.access_token || '');
-          log(`Login ${userKey} success`, data);
-        } catch (err) {
-          log(`Login ${userKey} failed`, err);
-        }
       }
 
       async function registerUser(userKey) {
@@ -320,11 +496,12 @@
           ).value;
           if (!nickname || !email || !password) {
             log(`Register ${userKey} failed`, {
-              error: 'Nickname/email/password required',
+              error: 'nickname/email/password required',
             });
             return;
           }
-          const data = await apiFetch(
+
+          const result = await apiFetch(
             '/auth/register',
             {
               method: 'POST',
@@ -333,9 +510,38 @@
             },
             null,
           );
-          log(`Register ${userKey} success`, data);
-        } catch (err) {
-          log(`Register ${userKey} failed`, err);
+          log(`Register ${userKey} success`, result);
+        } catch (error) {
+          log(`Register ${userKey} failed`, error);
+        }
+      }
+
+      async function login(userKey) {
+        try {
+          const email = document.getElementById(
+            userKey === 'A' ? 'emailA' : 'emailB',
+          ).value;
+          const password = document.getElementById(
+            userKey === 'A' ? 'passwordA' : 'passwordB',
+          ).value;
+          if (!email || !password) {
+            log(`Login ${userKey} failed`, { error: 'email/password required' });
+            return;
+          }
+
+          const result = await apiFetch(
+            '/auth/login',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            },
+            null,
+          );
+          setToken(userKey, result.access_token || '');
+          log(`Login ${userKey} success`, result);
+        } catch (error) {
+          log(`Login ${userKey} failed`, error);
         }
       }
 
@@ -345,17 +551,13 @@
           form.append('title', document.getElementById('postTitle').value);
           form.append('content', document.getElementById('postContent').value);
           form.append('category', document.getElementById('postCategory').value);
-          const data = await apiFetch(
-            '/posts',
-            { method: 'POST', body: form },
-            'A',
-          );
-          state.lastPostId = data.id;
-          document.getElementById('postIdDisplay').textContent = data.id;
-          document.getElementById('chatPostId').value = data.id;
-          log('Post created', data);
-        } catch (err) {
-          log('Post creation failed', err);
+
+          const result = await apiFetch('/posts', { method: 'POST', body: form }, 'A');
+          document.getElementById('postIdDisplay').textContent = String(result.id || '');
+          document.getElementById('chatPostId').value = String(result.id || '');
+          log('Post created', result);
+        } catch (error) {
+          log('Create post failed', error);
         }
       }
 
@@ -364,7 +566,12 @@
           const postId = Number(document.getElementById('chatPostId').value);
           const description = document.getElementById('chatDescription').value;
           const price = Number(document.getElementById('chatPrice').value || 0);
-          const data = await apiFetch(
+          if (!postId) {
+            log('Create chat room failed', { error: 'postId is required' });
+            return;
+          }
+
+          const result = await apiFetch(
             '/chats',
             {
               method: 'POST',
@@ -373,26 +580,26 @@
             },
             'B',
           );
-          const chatRoomId = data.chatRoom?.chatRoomId || data.chatRoomId;
-          state.lastChatRoomId = chatRoomId;
-          document.getElementById('chatRoomIdDisplay').textContent = chatRoomId;
-          document.getElementById('sendChatRoomId').value = chatRoomId;
-          document.getElementById('listChatRoomId').value = chatRoomId;
-          document.getElementById('readChatRoomId').value = chatRoomId;
-          log('Chat room created', data);
-        } catch (err) {
-          log('Chat room creation failed', err);
+
+          const chatRoomId = result.chatRoom?.chatRoomId || result.chatRoomId || result.id;
+          setSharedChatRoomId(chatRoomId);
+          log('Chat room created', result);
+        } catch (error) {
+          log('Create chat room failed', error);
         }
       }
 
-      async function sendMessage() {
+      async function sendTextMessage() {
         try {
-          const chatRoomId = Number(
-            document.getElementById('sendChatRoomId').value,
-          );
+          const chatRoomId = Number(document.getElementById('sendChatRoomId').value);
           const content = document.getElementById('sendContent').value;
           const userKey = document.getElementById('sendAs').value;
-          const data = await apiFetch(
+          if (!chatRoomId) {
+            log('Send text failed', { error: 'chatRoomId is required' });
+            return;
+          }
+
+          const result = await apiFetch(
             `/chats/${chatRoomId}/messages`,
             {
               method: 'POST',
@@ -401,47 +608,144 @@
             },
             userKey,
           );
-          log('Message sent', data);
-        } catch (err) {
-          log('Send message failed', err);
+          log('Text message sent', result);
+          await refreshBothViewers();
+        } catch (error) {
+          log('Send text failed', error);
         }
       }
 
-      async function listMessages() {
+      async function sendImageMessage() {
         try {
-          const chatRoomId = Number(
-            document.getElementById('listChatRoomId').value,
+          const chatRoomId = Number(document.getElementById('imageChatRoomId').value);
+          const fileInput = document.getElementById('imageFile');
+          const userKey = document.getElementById('imageSendAs').value;
+          const file = fileInput.files && fileInput.files[0];
+
+          if (!chatRoomId) {
+            log('Send image failed', { error: 'chatRoomId is required' });
+            return;
+          }
+          if (!file) {
+            log('Send image failed', { error: 'image file is required' });
+            return;
+          }
+
+          const form = new FormData();
+          form.append('image', file);
+
+          const result = await apiFetch(
+            `/chats/${chatRoomId}/messages/image`,
+            { method: 'POST', body: form },
+            userKey,
           );
-          const beforeId = document.getElementById('beforeId').value;
-          const afterId = document.getElementById('afterId').value;
-          const limit = document.getElementById('limit').value;
-          const params = new URLSearchParams();
-          if (beforeId) params.set('beforeId', beforeId);
-          if (afterId) params.set('afterId', afterId);
-          if (limit) params.set('limit', limit);
-          const data = await apiFetch(
-            `/chats/${chatRoomId}/messages?${params.toString()}`,
-            { method: 'GET' },
-            'A',
-          );
-          log('Messages', data);
-        } catch (err) {
-          log('List messages failed', err);
+          log('Image message sent', result);
+          fileInput.value = '';
+          await refreshBothViewers();
+        } catch (error) {
+          log('Send image failed', error);
         }
+      }
+
+      function renderMessages(userKey, messages) {
+        const container = document.getElementById(userKey === 'A' ? 'viewerA' : 'viewerB');
+        if (!Array.isArray(messages) || messages.length === 0) {
+          container.innerHTML = '<div class="note">No messages</div>';
+          return;
+        }
+
+        const html = messages
+          .map((message) => {
+            const type = escapeHtml(message.type || 'UNKNOWN');
+            const content = message.content ? escapeHtml(message.content) : '';
+            const imageUrl = message.imageUrl ? escapeHtml(message.imageUrl) : '';
+            const sentAt = message.sentAt
+              ? new Date(message.sentAt).toLocaleString()
+              : 'unknown';
+
+            return `
+              <div class="message-item">
+                <div class="message-meta">
+                  <span class="badge ${type}">${type}</span>
+                  <span>#${message.id} room:${message.chatRoomId} sender:${message.senderId}</span>
+                  <span>${escapeHtml(sentAt)}</span>
+                </div>
+                ${content ? `<div class="message-body">${content}</div>` : ''}
+                ${
+                  imageUrl
+                    ? `<div class="message-image">
+                        <img src="${imageUrl}" alt="chat image ${message.id}" />
+                        <a class="image-link" href="${imageUrl}" target="_blank" rel="noopener noreferrer">open image</a>
+                      </div>`
+                    : ''
+                }
+              </div>
+            `;
+          })
+          .join('');
+        container.innerHTML = html;
+      }
+
+      async function refreshViewer(userKey) {
+        try {
+          const chatRoomId = Number(document.getElementById('viewerChatRoomId').value);
+          const limit = Number(document.getElementById('viewerLimit').value || 30);
+          if (!chatRoomId) {
+            log(`Refresh viewer ${userKey} failed`, { error: 'chatRoomId is required' });
+            return;
+          }
+
+          const result = await apiFetch(
+            `/chats/${chatRoomId}/messages?limit=${limit}`,
+            { method: 'GET' },
+            userKey,
+          );
+          renderMessages(userKey, result.data || []);
+          log(`Viewer ${userKey} refreshed`, {
+            count: Array.isArray(result.data) ? result.data.length : 0,
+          });
+        } catch (error) {
+          log(`Refresh viewer ${userKey} failed`, error);
+        }
+      }
+
+      async function refreshBothViewers() {
+        await Promise.all([refreshViewer('A'), refreshViewer('B')]);
+      }
+
+      function toggleAutoRefresh() {
+        const button = document.getElementById('autoRefreshBtn');
+        if (state.autoRefreshTimer) {
+          clearInterval(state.autoRefreshTimer);
+          state.autoRefreshTimer = null;
+          button.textContent = 'Auto Refresh: OFF';
+          return;
+        }
+
+        const sec = Number(document.getElementById('autoRefreshSec').value || 3);
+        const interval = Math.max(1, sec) * 1000;
+        state.autoRefreshTimer = setInterval(() => {
+          refreshBothViewers();
+        }, interval);
+        button.textContent = `Auto Refresh: ON (${Math.max(1, sec)}s)`;
       }
 
       async function markAsRead() {
         try {
-          const chatRoomId = Number(
-            document.getElementById('readChatRoomId').value,
-          );
-          const lastReadMessageId = document.getElementById(
-            'lastReadMessageId',
-          ).value;
+          const chatRoomId = Number(document.getElementById('readChatRoomId').value);
+          const lastReadMessageId = document.getElementById('lastReadMessageId').value;
           const userKey = document.getElementById('readAs').value;
+          if (!chatRoomId) {
+            log('Mark as read failed', { error: 'chatRoomId is required' });
+            return;
+          }
+
           const body = {};
-          if (lastReadMessageId) body.lastReadMessageId = Number(lastReadMessageId);
-          const data = await apiFetch(
+          if (lastReadMessageId) {
+            body.lastReadMessageId = Number(lastReadMessageId);
+          }
+
+          const result = await apiFetch(
             `/chats/${chatRoomId}/read`,
             {
               method: 'PATCH',
@@ -450,11 +754,31 @@
             },
             userKey,
           );
-          log('Marked as read', data);
-        } catch (err) {
-          log('Mark as read failed', err);
+          log('Marked as read', result);
+          await refreshBothViewers();
+        } catch (error) {
+          log('Mark as read failed', error);
         }
       }
+
+      function initPage() {
+        const baseUrlInput = document.getElementById('baseUrl');
+        baseUrlInput.value = state.baseUrl;
+        baseUrlInput.addEventListener('change', () => {
+          state.baseUrl = baseUrlInput.value.trim().replace(/\/$/, '');
+          localStorage.setItem('chatTestBaseUrl', state.baseUrl);
+        });
+
+        setToken('A', state.tokens.A);
+        setToken('B', state.tokens.B);
+
+        document.getElementById('viewerA').innerHTML =
+          '<div class="note">Login and refresh to load messages.</div>';
+        document.getElementById('viewerB').innerHTML =
+          '<div class="note">Login and refresh to load messages.</div>';
+      }
+
+      initPage();
     </script>
   </body>
 </html>
