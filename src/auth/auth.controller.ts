@@ -3,12 +3,12 @@ import {
   Controller,
   Get,
   Post,
-  Request,
+  Req,
   Res,
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiTags,
@@ -17,10 +17,15 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { OAuthUser } from './auth.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MemberResponseDto } from '../member/dto/member-response.dto';
+import { Member } from '../entities/member.entity';
+
+type AuthRequest = Request & { user: Member };
+type OAuthRequest = Request & { user: OAuthUser };
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -74,14 +79,14 @@ export class AuthController {
     description: '프로필 조회 성공',
     type: MemberResponseDto,
   })
-  getProfile(@Request() req) {
+  getProfile(@Req() req: AuthRequest): Member {
     return req.user;
   }
 
   @Get('google')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: '구글 로그인' })
-  async googleAuth(@Request() req) {}
+  googleAuth(@Req() _req: Request): void {}
 
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
@@ -90,7 +95,7 @@ export class AuthController {
     status: 302,
     description: '로그인 성공 후 프론트엔드로 리다이렉트',
   })
-  async googleAuthRedirect(@Request() req, @Res() res: Response) {
+  async googleAuthRedirect(@Req() req: OAuthRequest, @Res() res: Response) {
     const { access_token } = await this.authService.oAuthLogin(req.user);
     res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
   }
@@ -101,7 +106,7 @@ export class AuthController {
     summary: '카카오 로그인 진입',
     description: '사용자를 카카오 로그인 페이지로 리다이렉트합니다.',
   })
-  async kakaoAuth(@Request() req) {}
+  kakaoAuth(@Req() _req: Request): void {}
 
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
@@ -114,7 +119,7 @@ export class AuthController {
     status: 302,
     description: '로그인 성공 후 프론트엔드로 리다이렉트',
   })
-  async kakaoAuthRedirect(@Request() req, @Res() res: Response) {
+  async kakaoAuthRedirect(@Req() req: OAuthRequest, @Res() res: Response) {
     const { access_token } = await this.authService.oAuthLogin(req.user);
     res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
   }

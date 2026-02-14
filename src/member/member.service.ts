@@ -10,12 +10,7 @@ import { Repository, In, LessThan } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
-import {
-  MemberProvider,
-  MemberRole,
-  MemberStatus,
-  TagStatus,
-} from '../common/enums';
+import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';

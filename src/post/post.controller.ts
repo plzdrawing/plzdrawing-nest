@@ -12,6 +12,7 @@ import {
   UploadedFiles,
   Query,
 } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
@@ -28,6 +29,9 @@ import { LatestContentsPageResponseDto } from './dto/latest-contents-page-respon
 import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
 
 import { Post as PostEntity } from '../entities/post.entity';
+import { Member } from '../entities/member.entity';
+
+type AuthRequest = ExpressRequest & { user: Member };
 
 @ApiTags('Post')
 @Controller('posts')
@@ -53,8 +57,14 @@ export class PostController {
     description: '게시글 작성 성공',
     type: PostEntity,
   })
-  @ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검사 실패 등)' })
-  @ApiResponse({ status: 413, description: '파일 크기 초과 (파일당 최대 10MB)' })
+  @ApiResponse({
+    status: 400,
+    description: '잘못된 요청 (유효성 검사 실패 등)',
+  })
+  @ApiResponse({
+    status: 413,
+    description: '파일 크기 초과 (파일당 최대 10MB)',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -77,8 +87,8 @@ export class PostController {
     },
   })
   create(
-    @Request() req,
-    @Body() body,
+    @Request() req: AuthRequest,
+    @Body() body: Partial<PostEntity>,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
     return this.postService.create(req.user, body, files);
@@ -125,7 +135,7 @@ export class PostController {
   @ApiResponse({ status: 400, description: '잘못된 요청' })
   @ApiResponse({ status: 403, description: '수정 권한 없음' })
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
-  update(@Param('id') id: string, @Body() body) {
+  update(@Param('id') id: string, @Body() body: Partial<PostEntity>) {
     return this.postService.update(+id, body);
   }
 

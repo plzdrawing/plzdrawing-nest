@@ -24,11 +24,11 @@ export class LikeService {
       .addSelect('COUNT(like.id)', 'count')
       .where('post.id IN (:...contentIds)', { contentIds })
       .groupBy('post.id')
-      .getRawMany();
+      .getRawMany<{ contentId: string; count: string }>();
 
     const map = new Map<number, number>();
     results.forEach((result) => {
-      map.set(parseInt(result.contentId), parseInt(result.count));
+      map.set(parseInt(result.contentId, 10), parseInt(result.count, 10));
     });
 
     return map;

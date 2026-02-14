@@ -62,7 +62,7 @@ export class AwsService {
       Key: key,
       ContentType: contentType,
     });
-    return getSignedUrl(this.s3Client as any, command, {
+    return getSignedUrl(this.getSignerClient(), command, {
       expiresIn: expiresInSeconds,
     });
   }
@@ -72,7 +72,7 @@ export class AwsService {
       Bucket: this.bucketName,
       Key: key,
     });
-    return getSignedUrl(this.s3Client as any, command, {
+    return getSignedUrl(this.getSignerClient(), command, {
       expiresIn: expiresInSeconds,
     });
   }
@@ -103,5 +103,9 @@ export class AwsService {
   private extractKeyFromUrl(url: string): string {
     const urlParts = url.split('.com/');
     return urlParts[1];
+  }
+
+  private getSignerClient(): Parameters<typeof getSignedUrl>[0] {
+    return this.s3Client as unknown as Parameters<typeof getSignedUrl>[0];
   }
 }

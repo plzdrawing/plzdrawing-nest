@@ -1,10 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Post } from '../entities/post.entity';
 import { PostImage } from '../entities/post-image.entity';
 import { Member } from '../entities/member.entity';
@@ -230,10 +226,12 @@ export class PostService {
       .addSelect('COUNT(post.id)', 'count')
       .where('post.member_id IN (:...memberIds)', { memberIds })
       .groupBy('post.member_id')
-      .getRawMany();
+      .getRawMany<{ memberId: string; count: string }>();
 
     const map = new Map<number, number>();
-    results.forEach((r) => map.set(parseInt(r.memberId), parseInt(r.count)));
+    results.forEach((r) =>
+      map.set(parseInt(r.memberId, 10), parseInt(r.count, 10)),
+    );
     return map;
   }
 

@@ -16,13 +16,14 @@ import { KakaoStrategy } from './strategies/kakao.strategy';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('SECRET_KEY'),
-        signOptions: {
-          expiresIn: (configService.get<string>('ACCESS_EXPIRATION') +
-            'ms') as any,
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const accessExpiration = configService.get<string>('ACCESS_EXPIRATION');
+        const expiresIn = accessExpiration ? `${accessExpiration}ms` : '1h';
+        return {
+          secret: configService.get<string>('SECRET_KEY'),
+          signOptions: { expiresIn },
+        };
+      },
     }),
   ],
   providers: [AuthService, JwtStrategy, GoogleStrategy, KakaoStrategy],

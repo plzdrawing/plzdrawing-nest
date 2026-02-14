@@ -51,7 +51,10 @@ export class MemberController {
     description: '프로필 업로드 성공',
     type: Boolean,
   })
-  @ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검사 실패 등)' })
+  @ApiResponse({
+    status: 400,
+    description: '잘못된 요청 (유효성 검사 실패 등)',
+  })
   @ApiResponse({ status: 413, description: '파일 크기 초과 (최대 5MB)' })
   @ApiBody({
     schema: {
