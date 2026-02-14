@@ -24,7 +24,7 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
+    it('헬로 월드 문자열을 반환해야 한다', () => {
       expect(appController.getHello()).toBe('Hello World!');
     });
   });

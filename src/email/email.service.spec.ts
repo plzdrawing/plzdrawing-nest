@@ -57,7 +57,7 @@ describe('EmailService', () => {
     service = module.get<EmailService>(EmailService);
   });
 
-  it('should be defined', () => {
+  it('정의되어 있어야 한다', () => {
     expect(service).toBeDefined();
   });
 });

@@ -23,7 +23,7 @@ describe('AlarmController', () => {
     controller = module.get<AlarmController>(AlarmController);
   });
 
-  it('should be defined', () => {
+  it('정의되어 있어야 한다', () => {
     expect(controller).toBeDefined();
   });
 });

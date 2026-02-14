@@ -33,7 +33,7 @@ describe('AuthService', () => {
     service = module.get<AuthService>(AuthService);
   });
 
-  it('should be defined', () => {
+  it('정의되어 있어야 한다', () => {
     expect(service).toBeDefined();
   });
 });
