@@ -4,6 +4,7 @@ import { AlarmService } from './alarm.service';
 
 describe('AlarmController', () => {
   let controller: AlarmController;
+  let consoleLogSpy: jest.SpyInstance;
 
   const mockAlarmService = {
     sendMessageTo: jest.fn(),
@@ -11,6 +12,9 @@ describe('AlarmController', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    consoleLogSpy = jest
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AlarmController],
@@ -23,6 +27,10 @@ describe('AlarmController', () => {
     }).compile();
 
     controller = module.get<AlarmController>(AlarmController);
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
   it('정의되어 있어야 한다', () => {
@@ -45,5 +53,9 @@ describe('AlarmController', () => {
     mockAlarmService.sendMessageTo.mockRejectedValue(new Error('FCM failed'));
 
     await expect(controller.fcmTest()).resolves.toBe(true);
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'FCM Test send failed (expected without valid token):',
+      expect.any(Error),
+    );
   });
 });

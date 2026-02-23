@@ -4,6 +4,7 @@ import { AlarmService } from './alarm.service';
 describe('AlarmService', () => {
   let service: AlarmService;
   let sendMock: jest.Mock;
+  let consoleErrorSpy: jest.SpyInstance;
 
   const mockFirebaseAdmin = {
     messaging: jest.fn(),
@@ -11,6 +12,9 @@ describe('AlarmService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    consoleErrorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
     sendMock = jest.fn();
     mockFirebaseAdmin.messaging.mockReturnValue({
       send: sendMock,
@@ -27,6 +31,10 @@ describe('AlarmService', () => {
     }).compile();
 
     service = module.get<AlarmService>(AlarmService);
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
   });
 
   it('정의되어 있어야 한다', () => {
@@ -51,5 +59,9 @@ describe('AlarmService', () => {
     await expect(
       service.sendMessageTo('token', 'title', 'body', '/link'),
     ).rejects.toThrow(error);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Error sending message:',
+      error,
+    );
   });
 });
