@@ -43,8 +43,10 @@ export enum ReviewStar {
 
 export enum ChatRoomStatus {
   REQUESTED = 'REQUESTED',
+  ACCEPTED = 'ACCEPTED',
   PAID = 'PAID',
   IN_PROGRESS = 'IN_PROGRESS',
+  DRAFT_SENT = 'DRAFT_SENT',
   COMPLETED = 'COMPLETED',
   REVIEWED = 'REVIEWED',
   CANCELLED = 'CANCELLED',

@@ -28,7 +28,7 @@ export class SendMessageDto {
   })
   @ValidateIf((o) => !o.type || o.type === MessageType.TEXT)
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(1000)
   content?: string;
 
   @ApiPropertyOptional({
