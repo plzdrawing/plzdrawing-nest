@@ -1,9 +1,18 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { MemberService } from '../member/member.service';
 import { Member } from '../entities/member.entity';
 import { MemberProvider, MemberRole } from '../common/enums';
+
+export type AuthenticatedMember = Omit<Member, 'password'>;
+
+export interface OAuthUser {
+  email: string;
+  nickname?: string;
+  firstName?: string;
+  provider: 'google' | 'kakao';
+}
 
 @Injectable()
 export class AuthService {
@@ -12,16 +21,22 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async validateUser(email: string, pass: string): Promise<any> {
+  async validateUser(
+    email: string,
+    pass: string,
+  ): Promise<AuthenticatedMember | null> {
     const member = await this.memberService.findByEmail(email);
     if (member && (await bcrypt.compare(pass, member.password))) {
-      const { password, ...result } = member;
-      return result;
+      const memberWithoutPassword = { ...member } as Partial<Member>;
+      delete memberWithoutPassword.password;
+      return memberWithoutPassword as AuthenticatedMember;
     }
     return null;
   }
 
-  async login(member: Member) {
+  login(member: Pick<Member, 'id' | 'email' | 'role'>): {
+    access_token: string;
+  } {
     const payload = { email: member.email, sub: member.id, role: member.role };
     return {
       access_token: this.jwtService.sign(payload),
@@ -38,7 +53,7 @@ export class AuthService {
     });
   }
 
-  async oAuthLogin(user: any) {
+  async oAuthLogin(user: OAuthUser): Promise<{ access_token: string }> {
     let member = await this.memberService.findByEmail(user.email);
 
     if (!member) {

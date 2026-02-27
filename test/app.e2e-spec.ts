@@ -16,7 +16,7 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  it('루트 경로 요청이 헬로 월드를 반환해야 한다', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)

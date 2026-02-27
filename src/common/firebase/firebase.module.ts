@@ -18,7 +18,7 @@ import * as path from 'path';
         const absolutePath = path.resolve(process.cwd(), firebaseConfigPath);
 
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const serviceAccount = require(absolutePath);
+        const serviceAccount = require(absolutePath) as admin.ServiceAccount;
 
         return admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),

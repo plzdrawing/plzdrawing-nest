@@ -6,7 +6,6 @@ describe('MemberController', () => {
   let controller: MemberController;
 
   const mockMemberService = {
-    // Add methods used in controller if needed, for now just empty object or minimal mocks
     uploadProfile: jest.fn(),
     updateProfile: jest.fn(),
     getMyProfile: jest.fn(),
@@ -15,6 +14,8 @@ describe('MemberController', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [MemberController],
       providers: [
@@ -28,7 +29,58 @@ describe('MemberController', () => {
     controller = module.get<MemberController>(MemberController);
   });
 
-  it('should be defined', () => {
+  it('정의되어 있어야 한다', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('uploadProfile은 member.id를 추출해 서비스에 위임한다', async () => {
+    mockMemberService.uploadProfile.mockResolvedValue(true);
+    const member = { id: 10 };
+    const file = { originalname: 'profile.png' };
+    const dto = { introduce: 'hi' };
+
+    await expect(
+      controller.uploadProfile(member as any, file as any, dto as any),
+    ).resolves.toBe(true);
+    expect(mockMemberService.uploadProfile).toHaveBeenCalledWith(10, file, dto);
+  });
+
+  it('updateProfile은 member.id를 추출해 서비스에 위임한다', async () => {
+    mockMemberService.updateProfile.mockResolvedValue(true);
+
+    await expect(
+      controller.updateProfile(
+        { id: 11 } as any,
+        { originalname: 'a.png' } as any,
+        { nickname: 'nick' } as any,
+      ),
+    ).resolves.toBe(true);
+    expect(mockMemberService.updateProfile).toHaveBeenCalledWith(
+      11,
+      expect.any(Object),
+      expect.objectContaining({ nickname: 'nick' }),
+    );
+  });
+
+  it('getMyProfile은 member.id로 조회한다', async () => {
+    mockMemberService.getMyProfile.mockResolvedValue({ nickname: 'nick' });
+
+    await expect(controller.getMyProfile({ id: 12 } as any)).resolves.toEqual({
+      nickname: 'nick',
+    });
+    expect(mockMemberService.getMyProfile).toHaveBeenCalledWith(12);
+  });
+
+  it('checkNickname은 쿼리값을 그대로 전달한다', async () => {
+    mockMemberService.checkNickname.mockResolvedValue(false);
+
+    await expect(controller.checkNickname('nick')).resolves.toBe(false);
+    expect(mockMemberService.checkNickname).toHaveBeenCalledWith('nick');
+  });
+
+  it('withdraw는 member.id로 탈퇴 처리한다', async () => {
+    await controller.withdraw({ id: 13 } as any);
+
+    expect(mockMemberService.withdraw).toHaveBeenCalledWith(13);
   });
 });
