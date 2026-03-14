@@ -244,9 +244,9 @@ export class ChatController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '이미지 메시지 전송',
+    summary: '이미지 업로드 URL 발급',
     description:
-      '이미지 파일(필수)을 업로드하여 IMAGE 타입 메시지를 전송합니다. 파일 최대 크기는 10MB입니다.',
+      'S3 presigned 업로드 URL만 발급합니다. 실제 파일 업로드(PUT)는 FE가 uploadUrl로 직접 수행해야 하며, 업로드 완료 후 POST /chats/:id/messages에 type=IMAGE와 objectKey를 전달해 메시지를 전송합니다. 파일 최대 크기는 10MB입니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
   @ApiBody({
@@ -274,19 +274,6 @@ export class ChatController {
   @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
   @ApiResponse({ status: 404, description: '채팅방을 찾을 수 없음' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['image'],
-      properties: {
-        image: {
-          description: '전송할 이미지 파일(필수), 최대 10MB',
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
   async sendImageMessage(
     @GetUser() member: Member,
     @Param('id') id: string,

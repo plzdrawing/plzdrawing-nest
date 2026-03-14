@@ -3,19 +3,22 @@ import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { MAX_CHAT_IMAGE_SIZE_BYTES } from '../chat.constants';
 
 export class ChatImageUploadRequestDto {
-  @ApiProperty({ description: '원본 파일명', example: 'dog.png' })
+  @ApiProperty({
+    description: 'FE에서 업로드할 원본 파일명 (파일 바이너리는 전송하지 않음)',
+    example: 'dog.png',
+  })
   @IsString()
   fileName: string;
 
   @ApiProperty({
-    description: 'MIME 타입',
+    description: 'FE에서 업로드할 파일의 MIME 타입',
     example: 'image/png',
   })
   @IsString()
   contentType: string;
 
   @ApiProperty({
-    description: '파일 크기 (bytes)',
+    description: 'FE에서 업로드할 파일 크기 (bytes)',
     example: 5242880,
   })
   @IsInt()
