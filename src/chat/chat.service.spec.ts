@@ -9,6 +9,7 @@ import { ChatService } from './chat.service';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
+import { PaymentHistory } from '../entities/payment-history.entity';
 import { AwsService } from '../common/aws/aws.service';
 import {
   ChatRoomStatus,
@@ -32,6 +33,7 @@ describe('ChatService', () => {
   let chatRoomRepository: any;
   let messageRepository: any;
   let postRepository: any;
+  let paymentHistoryRepository: any;
   let awsService: any;
 
   const requester: Member = {
@@ -111,6 +113,11 @@ describe('ChatService', () => {
       findOne: jest.fn(),
     };
 
+    paymentHistoryRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
     awsService = {
       createPresignedUploadUrl: jest.fn(),
       createPresignedGetUrl: jest.fn(),
@@ -130,6 +137,10 @@ describe('ChatService', () => {
         {
           provide: getRepositoryToken(Post),
           useValue: postRepository,
+        },
+        {
+          provide: getRepositoryToken(PaymentHistory),
+          useValue: paymentHistoryRepository,
         },
         {
           provide: AwsService,
