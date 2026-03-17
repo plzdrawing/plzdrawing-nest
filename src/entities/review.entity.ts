@@ -36,6 +36,12 @@ export class Review {
   @Column({ name: 'post_id' })
   postId: number;
 
+  @Column({ name: 'chat_room_id', nullable: true })
+  chatRoomId: number;
+
+  @Column({ name: 'image_object_keys', type: 'json', nullable: true })
+  imageObjectKeys: string[];
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

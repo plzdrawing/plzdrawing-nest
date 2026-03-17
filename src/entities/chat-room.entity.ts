@@ -42,6 +42,15 @@ export class ChatRoom extends BaseEntity {
   @Column({ name: 'paid_amount', nullable: true })
   paidAmount: number;
 
+  @Column({ name: 'estimated_at', type: 'date', nullable: true })
+  estimatedAt: Date;
+
+  @Column({ name: 'feedback_count', default: 1 })
+  feedbackCount: number;
+
+  @Column({ name: 'feedback_used', default: 0 })
+  feedbackUsed: number;
+
   @ManyToOne(() => Member, (member) => member.requestedChatRooms)
   @JoinColumn({ name: 'requester_id' })
   requester: Member;

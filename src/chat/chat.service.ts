@@ -12,8 +12,14 @@ import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
+import { PaymentHistory } from '../entities/payment-history.entity';
 import { AwsService } from '../common/aws/aws.service';
-import { ChatRoomStatus, MessageType } from '../common/enums';
+import {
+  ChatRoomStatus,
+  MessageType,
+  PaymentStatus,
+  PaymentType,
+} from '../common/enums';
 import {
   CHAT_IMAGE_ALLOWED_CONTENT_TYPES,
   CHAT_IMAGE_DOWNLOAD_EXPIRES_IN_SECONDS,
@@ -37,6 +43,15 @@ import { ChatRoomPostDto } from './dto/chat-room-post.dto';
 import { LastMessageDto } from './dto/last-message.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { MessageListResponseDto } from './dto/message-list-response.dto';
+import { AcceptChatDto } from './dto/accept-chat.dto';
+import { RejectChatDto } from './dto/reject-chat.dto';
+import { RequestPriceChangeDto } from './dto/request-price-change.dto';
+import { PayChatDto } from './dto/pay-chat.dto';
+import { PayChatResponseDto } from './dto/pay-chat-response.dto';
+import { SendDrawingDto } from './dto/send-drawing.dto';
+import { SendDrawingResponseDto } from './dto/send-drawing-response.dto';
+import { RevisionRequestDto } from './dto/revision-request.dto';
+import { UpdateChatRequestDto } from './dto/update-chat-request.dto';
 
 @Injectable()
 export class ChatService {
@@ -47,6 +62,8 @@ export class ChatService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(Post)
     private readonly postRepository: Repository<Post>,
+    @InjectRepository(PaymentHistory)
+    private readonly paymentHistoryRepository: Repository<PaymentHistory>,
     private readonly awsService: AwsService,
   ) {}
 
@@ -357,6 +374,320 @@ export class ChatService {
     return { updatedCount: result.affected ?? 0 };
   }
 
+  // ── 요청 내용 수정 (REQUESTED 상태, 요청자 전용) ──────────────────────────
+  async updateChatRequest(
+    member: Member,
+    chatRoomId: number,
+    dto: UpdateChatRequestDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.requesterId !== member.id) {
+      throw new ForbiddenException('Only the requester can update the request');
+    }
+    if (chatRoom.status !== ChatRoomStatus.REQUESTED) {
+      throw new BadRequestException(
+        'Can only update request in REQUESTED status',
+      );
+    }
+
+    chatRoom.description = dto.description;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'REQUEST_CARD',
+      postId: chatRoom.post.id,
+      title: chatRoom.post.title,
+      price: chatRoom.price ?? null,
+      description: dto.description,
+    });
+    await this.touchChatRoom(chatRoomId);
+
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 수락 (REQUESTED → ACCEPTED) ──────────────────────────────────────────
+  async acceptChatRoom(
+    member: Member,
+    chatRoomId: number,
+    dto: AcceptChatDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.artistId !== member.id) {
+      throw new ForbiddenException('Only the artist can accept');
+    }
+    if (chatRoom.status !== ChatRoomStatus.REQUESTED) {
+      throw new BadRequestException('Chat room is not in REQUESTED status');
+    }
+
+    chatRoom.status = ChatRoomStatus.ACCEPTED;
+    chatRoom.price = dto.price;
+    chatRoom.estimatedAt = new Date(dto.estimatedAt);
+    chatRoom.feedbackCount = dto.feedbackCount;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'ACCEPTED',
+      artistNickname: member.nickname,
+    });
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'PAYMENT_REQUEST',
+      price: dto.price,
+      estimatedAt: dto.estimatedAt,
+      feedbackCount: dto.feedbackCount,
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 거절 (REQUESTED → CANCELLED) ─────────────────────────────────────────
+  async rejectChatRoom(
+    member: Member,
+    chatRoomId: number,
+    dto: RejectChatDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.artistId !== member.id) {
+      throw new ForbiddenException('Only the artist can reject');
+    }
+    if (chatRoom.status !== ChatRoomStatus.REQUESTED) {
+      throw new BadRequestException('Chat room is not in REQUESTED status');
+    }
+
+    chatRoom.status = ChatRoomStatus.CANCELLED;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'REJECTED',
+      reasons: dto.reasons ?? [],
+      reasonText: dto.reasonText ?? '',
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 요청자 취소 (REQUESTED / ACCEPTED → CANCELLED) ───────────────────────
+  async cancelChatRoom(
+    member: Member,
+    chatRoomId: number,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.requesterId !== member.id) {
+      throw new ForbiddenException('Only the requester can cancel');
+    }
+    if (
+      chatRoom.status !== ChatRoomStatus.REQUESTED &&
+      chatRoom.status !== ChatRoomStatus.ACCEPTED
+    ) {
+      throw new BadRequestException(
+        'Can only cancel in REQUESTED or ACCEPTED status',
+      );
+    }
+
+    chatRoom.status = ChatRoomStatus.CANCELLED;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'CANCELLED_BY_REQUESTER',
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 견적/금액 수정 요청 (REQUESTED / ACCEPTED 상태 유지) ─────────────────
+  async requestPriceChange(
+    member: Member,
+    chatRoomId: number,
+    dto: RequestPriceChangeDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.artistId !== member.id) {
+      throw new ForbiddenException('Only the artist can change the price');
+    }
+    if (
+      chatRoom.status !== ChatRoomStatus.REQUESTED &&
+      chatRoom.status !== ChatRoomStatus.ACCEPTED
+    ) {
+      throw new BadRequestException(
+        'Can only change price in REQUESTED or ACCEPTED status',
+      );
+    }
+
+    chatRoom.price = dto.price;
+    chatRoom.estimatedAt = new Date(dto.estimatedAt);
+    chatRoom.feedbackCount = dto.feedbackCount;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'PRICE_CHANGE_REQUEST',
+      price: dto.price,
+      estimatedAt: dto.estimatedAt,
+      feedbackCount: dto.feedbackCount,
+      reason: dto.reason ?? '',
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 결제 (ACCEPTED → PAID) ────────────────────────────────────────────────
+  async payChatRoom(
+    member: Member,
+    chatRoomId: number,
+    dto: PayChatDto,
+  ): Promise<PayChatResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.requesterId !== member.id) {
+      throw new ForbiddenException('Only the requester can pay');
+    }
+    if (chatRoom.status !== ChatRoomStatus.ACCEPTED) {
+      throw new BadRequestException('Chat room is not in ACCEPTED status');
+    }
+    if (!chatRoom.price) {
+      throw new BadRequestException('Price is not set');
+    }
+
+    chatRoom.status = ChatRoomStatus.PAID;
+    chatRoom.paidAmount = chatRoom.price;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.paymentHistoryRepository.save(
+      this.paymentHistoryRepository.create({
+        senderId: chatRoom.requesterId,
+        receiverId: chatRoom.artistId,
+        amount: chatRoom.price,
+        method: dto.paymentMethod,
+        status: PaymentStatus.COMPLETED,
+        type: PaymentType.SEND,
+        chatRoomId,
+      }),
+    );
+
+    const estimatedAtStr = chatRoom.estimatedAt
+      ? new Date(chatRoom.estimatedAt).toISOString().slice(0, 10)
+      : '';
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'PAYMENT_COMPLETED',
+      paidAmount: chatRoom.paidAmount,
+      estimatedAt: estimatedAtStr,
+      requesterNickname: member.nickname,
+    });
+    await this.touchChatRoom(chatRoomId);
+
+    return { feedbackCount: chatRoom.feedbackCount };
+  }
+
+  // ── 작업 시작 (PAID → IN_PROGRESS) ───────────────────────────────────────
+  async startWork(
+    member: Member,
+    chatRoomId: number,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.artistId !== member.id) {
+      throw new ForbiddenException('Only the artist can start work');
+    }
+    if (chatRoom.status !== ChatRoomStatus.PAID) {
+      throw new BadRequestException('Chat room is not in PAID status');
+    }
+
+    chatRoom.status = ChatRoomStatus.IN_PROGRESS;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'WORK_STARTED',
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 그림 전송 (IN_PROGRESS → DRAFT_SENT) ─────────────────────────────────
+  async sendDrawing(
+    member: Member,
+    chatRoomId: number,
+    dto: SendDrawingDto,
+  ): Promise<SendDrawingResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.artistId !== member.id) {
+      throw new ForbiddenException('Only the artist can send drawing');
+    }
+    if (chatRoom.status !== ChatRoomStatus.IN_PROGRESS) {
+      throw new BadRequestException('Chat room is not in IN_PROGRESS status');
+    }
+
+    for (const key of dto.imageObjectKeys) {
+      this.assertImageObjectKey(key, chatRoomId);
+    }
+
+    chatRoom.status = ChatRoomStatus.DRAFT_SENT;
+    await this.chatRoomRepository.save(chatRoom);
+
+    const remainingRevisions = chatRoom.feedbackCount - chatRoom.feedbackUsed;
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'DRAWING_SENT',
+      imageObjectKeys: dto.imageObjectKeys,
+      remainingRevisions,
+    });
+    await this.touchChatRoom(chatRoomId);
+
+    return { remainingRevisions };
+  }
+
+  // ── 수정 요청 (DRAFT_SENT → IN_PROGRESS) ─────────────────────────────────
+  async requestRevision(
+    member: Member,
+    chatRoomId: number,
+    dto: RevisionRequestDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.requesterId !== member.id) {
+      throw new ForbiddenException('Only the requester can request revision');
+    }
+    if (chatRoom.status !== ChatRoomStatus.DRAFT_SENT) {
+      throw new BadRequestException('Chat room is not in DRAFT_SENT status');
+    }
+    if (chatRoom.feedbackUsed >= chatRoom.feedbackCount) {
+      throw new BadRequestException('No remaining revisions');
+    }
+
+    chatRoom.feedbackUsed += 1;
+    chatRoom.status = ChatRoomStatus.IN_PROGRESS;
+    await this.chatRoomRepository.save(chatRoom);
+
+    const remainingRevisions = chatRoom.feedbackCount - chatRoom.feedbackUsed;
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'REVISION_REQUESTED',
+      content: dto.content,
+      remainingRevisions,
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
+  // ── 최종 확인 / 저장하기 (DRAFT_SENT → COMPLETED) ───────────────────────
+  async confirmDrawing(
+    member: Member,
+    chatRoomId: number,
+  ): Promise<ChatRoomDetailResponseDto> {
+    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
+    if (chatRoom.requesterId !== member.id) {
+      throw new ForbiddenException('Only the requester can confirm');
+    }
+    if (chatRoom.status !== ChatRoomStatus.DRAFT_SENT) {
+      throw new BadRequestException('Chat room is not in DRAFT_SENT status');
+    }
+
+    chatRoom.status = ChatRoomStatus.COMPLETED;
+    await this.chatRoomRepository.save(chatRoom);
+
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'WORK_COMPLETED',
+    });
+    await this.createSystemMessage(chatRoomId, member.id, {
+      kind: 'REVIEW_PROMPT',
+      requesterNickname: member.nickname,
+    });
+    await this.touchChatRoom(chatRoomId);
+    return this.mapChatRoomDetail(chatRoom);
+  }
+
   private async createRequestCardMessage(
     chatRoom: ChatRoom,
     member: Member,
@@ -384,6 +715,37 @@ export class ChatService {
     await this.chatRoomRepository.update(chatRoomId, {
       updatedAt: new Date(),
     });
+  }
+
+  private async loadChatRoomWithRelations(
+    chatRoomId: number,
+  ): Promise<ChatRoom> {
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { id: chatRoomId },
+      relations: [
+        'post',
+        'requester',
+        'requester.profile',
+        'artist',
+        'artist.profile',
+      ],
+    });
+    if (!chatRoom) throw new NotFoundException('Chat room not found');
+    return chatRoom;
+  }
+
+  private async createSystemMessage(
+    chatRoomId: number,
+    senderId: number,
+    content: object,
+  ): Promise<void> {
+    const message = this.messageRepository.create({
+      chatRoomId,
+      senderId,
+      type: MessageType.SYSTEM,
+      content: JSON.stringify(content),
+    });
+    await this.messageRepository.save(message);
   }
 
   private assertMember(chatRoom: ChatRoom, memberId: number): void {

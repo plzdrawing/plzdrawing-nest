@@ -33,6 +33,15 @@ import { ChatRoomListResponseDto } from './dto/chat-room-list-response.dto';
 import { ChatRoomDetailResponseDto } from './dto/chat-room-detail-response.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
 import { MessageListResponseDto } from './dto/message-list-response.dto';
+import { AcceptChatDto } from './dto/accept-chat.dto';
+import { RejectChatDto } from './dto/reject-chat.dto';
+import { RequestPriceChangeDto } from './dto/request-price-change.dto';
+import { PayChatDto } from './dto/pay-chat.dto';
+import { PayChatResponseDto } from './dto/pay-chat-response.dto';
+import { SendDrawingDto } from './dto/send-drawing.dto';
+import { SendDrawingResponseDto } from './dto/send-drawing-response.dto';
+import { RevisionRequestDto } from './dto/revision-request.dto';
+import { UpdateChatRequestDto } from './dto/update-chat-request.dto';
 
 @ApiTags('Chat')
 @Controller('chats')
@@ -235,9 +244,9 @@ export class ChatController {
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: '이미지 메시지 전송',
+    summary: '이미지 업로드 URL 발급',
     description:
-      '이미지 파일(필수)을 업로드하여 IMAGE 타입 메시지를 전송합니다. 파일 최대 크기는 10MB입니다.',
+      'S3 presigned 업로드 URL만 발급합니다. 실제 파일 업로드(PUT)는 FE가 uploadUrl로 직접 수행해야 하며, 업로드 완료 후 POST /chats/:id/messages에 type=IMAGE와 objectKey를 전달해 메시지를 전송합니다. 파일 최대 크기는 10MB입니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
   @ApiBody({
@@ -265,19 +274,6 @@ export class ChatController {
   @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
   @ApiResponse({ status: 404, description: '채팅방을 찾을 수 없음' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['image'],
-      properties: {
-        image: {
-          description: '전송할 이미지 파일(필수), 최대 10MB',
-          type: 'string',
-          format: 'binary',
-        },
-      },
-    },
-  })
   async sendImageMessage(
     @GetUser() member: Member,
     @Param('id') id: string,
@@ -320,5 +316,271 @@ export class ChatController {
     @Body() dto: ReadChatDto,
   ): Promise<{ updatedCount: number }> {
     return this.chatService.markAsRead(member, +id, dto);
+  }
+
+  @Patch(':id/request')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '요청 내용 수정 (요청자)',
+    description:
+      'REQUESTED 상태에서만 요청자가 요청 내용(description)을 수정합니다. 수정 시 새 REQUEST_CARD 시스템 메시지가 생성됩니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: UpdateChatRequestDto })
+  @ApiResponse({
+    status: 200,
+    description: '요청 내용 수정 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'REQUESTED 상태가 아님' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async updateChatRequest(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: UpdateChatRequestDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.updateChatRequest(member, +id, dto);
+  }
+
+  @Patch(':id/accept')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '요청 수락 (그림쟁이)',
+    description:
+      'REQUESTED 상태의 채팅방을 ACCEPTED로 전환하고 PAYMENT_REQUEST 카드를 생성합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: AcceptChatDto })
+  @ApiResponse({
+    status: 200,
+    description: '수락 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (그림쟁이만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async acceptChatRoom(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: AcceptChatDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.acceptChatRoom(member, +id, dto);
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '요청 거절 (그림쟁이)',
+    description: 'REQUESTED 상태의 채팅방을 CANCELLED로 전환합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: RejectChatDto })
+  @ApiResponse({
+    status: 200,
+    description: '거절 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (그림쟁이만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async rejectChatRoom(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: RejectChatDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.rejectChatRoom(member, +id, dto);
+  }
+
+  @Patch(':id/cancel')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '요청 취소 (요청자)',
+    description:
+      'REQUESTED 또는 ACCEPTED 상태의 채팅방을 CANCELLED로 전환합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: '취소 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async cancelChatRoom(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.cancelChatRoom(member, +id);
+  }
+
+  @Patch(':id/request-price-change')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '견적 수정 요청 (그림쟁이)',
+    description:
+      'REQUESTED / ACCEPTED 상태에서 금액, 예상 완료일, 수정 횟수를 변경하고 PRICE_CHANGE_REQUEST 카드를 생성합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: RequestPriceChangeDto })
+  @ApiResponse({
+    status: 200,
+    description: '견적 수정 요청 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (그림쟁이만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async requestPriceChange(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: RequestPriceChangeDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.requestPriceChange(member, +id, dto);
+  }
+
+  @Patch(':id/pay')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '결제 (요청자)',
+    description:
+      'ACCEPTED 상태에서 결제를 진행하고 PAID 상태로 전환합니다. PaymentHistory가 생성됩니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: PayChatDto })
+  @ApiResponse({
+    status: 200,
+    description: '결제 성공 — feedbackCount 반환',
+    type: PayChatResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태 또는 금액 미설정' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async payChatRoom(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: PayChatDto,
+  ): Promise<PayChatResponseDto> {
+    return this.chatService.payChatRoom(member, +id, dto);
+  }
+
+  @Patch(':id/start')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '작업 시작 (그림쟁이)',
+    description:
+      'PAID 상태에서 IN_PROGRESS로 전환하고 WORK_STARTED 시스템 메시지를 생성합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: '작업 시작 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (그림쟁이만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async startWork(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.startWork(member, +id);
+  }
+
+  @Post(':id/send-drawing')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '그림 전송 (그림쟁이)',
+    description:
+      'IN_PROGRESS 상태에서 DRAFT_SENT로 전환하고 DRAWING_SENT 시스템 메시지를 생성합니다. 이미지 최대 3개.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: SendDrawingDto })
+  @ApiResponse({
+    status: 201,
+    description: '그림 전송 성공 — remainingRevisions 반환',
+    type: SendDrawingResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태 또는 objectKey' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (그림쟁이만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async sendDrawing(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: SendDrawingDto,
+  ): Promise<SendDrawingResponseDto> {
+    return this.chatService.sendDrawing(member, +id, dto);
+  }
+
+  @Post(':id/revision')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '수정 요청 (요청자)',
+    description:
+      'DRAFT_SENT 상태에서 IN_PROGRESS로 복귀하고 REVISION_REQUESTED 시스템 메시지를 생성합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiBody({ type: RevisionRequestDto })
+  @ApiResponse({
+    status: 201,
+    description: '수정 요청 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: '잘못된 상태 또는 남은 수정 횟수 없음',
+  })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async requestRevision(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: RevisionRequestDto,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.requestRevision(member, +id, dto);
+  }
+
+  @Patch(':id/confirm')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '최종 확인 / 저장하기 (요청자)',
+    description:
+      'DRAFT_SENT 상태에서 COMPLETED로 전환하고 WORK_COMPLETED + REVIEW_PROMPT 시스템 메시지를 생성합니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiResponse({
+    status: 200,
+    description: '최종 확인 성공',
+    type: ChatRoomDetailResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 상태' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
+  @ApiResponse({ status: 404, description: '채팅방 없음' })
+  async confirmDrawing(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<ChatRoomDetailResponseDto> {
+    return this.chatService.confirmDrawing(member, +id);
   }
 }
