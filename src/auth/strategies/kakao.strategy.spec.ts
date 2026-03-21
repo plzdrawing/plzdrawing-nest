@@ -6,6 +6,8 @@ describe('KakaoStrategy', () => {
       switch (key) {
         case 'KAKAO_CLIENT_ID':
           return 'kakao-client-id';
+        case 'KAKAO_CLIENT_SECRET':
+          return 'kakao-client-secret';
         case 'KAKAO_REDIRECT_URI':
           return 'http://localhost/kakao/callback';
         default:
@@ -23,6 +25,7 @@ describe('KakaoStrategy', () => {
 
     expect(strategy).toBeDefined();
     expect(configService.get).toHaveBeenCalledWith('KAKAO_CLIENT_ID');
+    expect(configService.get).toHaveBeenCalledWith('KAKAO_CLIENT_SECRET');
     expect(configService.get).toHaveBeenCalledWith('KAKAO_REDIRECT_URI');
   });
 
