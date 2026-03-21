@@ -8,6 +8,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -30,7 +31,10 @@ type OAuthRequest = Request & { user: OAuthUser };
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Post('register')
   @ApiOperation({ summary: '회원가입' })
@@ -97,7 +101,7 @@ export class AuthController {
   })
   async googleAuthRedirect(@Req() req: OAuthRequest, @Res() res: Response) {
     const { access_token } = await this.authService.oAuthLogin(req.user);
-    res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
+    res.redirect(this.buildOAuthRedirectUrl(access_token));
   }
 
   @Get('kakao')
@@ -121,6 +125,24 @@ export class AuthController {
   })
   async kakaoAuthRedirect(@Req() req: OAuthRequest, @Res() res: Response) {
     const { access_token } = await this.authService.oAuthLogin(req.user);
-    res.redirect(`http://localhost:3000/oauth/callback?token=${access_token}`);
+    res.redirect(this.buildOAuthRedirectUrl(access_token));
+  }
+
+  private buildOAuthRedirectUrl(accessToken: string): string {
+    const oauthRedirectUrl =
+      this.configService.get<string>('OAUTH_REDIRECT_URL');
+    const memberRedirectUrl = this.configService.get<string>(
+      'MEMBER_REDIRECT_URL',
+    );
+
+    const callbackBase = oauthRedirectUrl
+      ? oauthRedirectUrl
+      : memberRedirectUrl
+        ? new URL('/oauth/callback', memberRedirectUrl).toString()
+        : 'http://localhost:3000/oauth/callback';
+
+    const redirectUrl = new URL(callbackBase);
+    redirectUrl.searchParams.set('token', accessToken);
+    return redirectUrl.toString();
   }
 }
