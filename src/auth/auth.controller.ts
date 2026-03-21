@@ -24,6 +24,7 @@ import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MemberResponseDto } from '../member/dto/member-response.dto';
 import { Member } from '../entities/member.entity';
+import { KakaoAuthGuard } from './guards/kakao-auth.guard';
 
 type AuthRequest = Request & { user: Member };
 type OAuthRequest = Request & { user: OAuthUser };
@@ -105,23 +106,41 @@ export class AuthController {
   }
 
   @Get('kakao')
-  @UseGuards(AuthGuard('kakao'))
+  @UseGuards(KakaoAuthGuard)
   @ApiOperation({
-    summary: '카카오 로그인 진입',
-    description: '사용자를 카카오 로그인 페이지로 리다이렉트합니다.',
+    summary: '카카오 로그인 시작 (리다이렉트)',
+    description:
+      '사용자를 카카오 인증 페이지로 302 리다이렉트합니다. 네이티브 앱은 시스템 브라우저/웹뷰에서 이 엔드포인트를 열어 로그인 플로우를 시작하세요.',
+  })
+  @ApiResponse({
+    status: 302,
+    description: '카카오 인증 페이지로 리다이렉트',
+  })
+  @ApiResponse({
+    status: 500,
+    description:
+      '카카오 OAuth 설정 오류 (KAKAO_CLIENT_ID / KAKAO_REDIRECT_URI 불일치 등)',
   })
   kakaoAuth(@Req() _req: Request): void {}
 
   @Get('kakao/callback')
   @UseGuards(AuthGuard('kakao'))
   @ApiOperation({
-    summary: '카카오 로그인 콜백',
+    summary: '카카오 로그인 콜백 처리',
     description:
-      '카카오 인증 완료 후, 유저 정보를 조회하여 JWT 토큰을 발급하고 프론트엔드 URL로 리다이렉트합니다.',
+      '카카오 인증 완료 후 JWT를 발급하고 OAUTH_REDIRECT_URL(예: myapp://oauth/callback)로 302 리다이렉트합니다. 최종 URL 예시: myapp://oauth/callback?token={jwt}',
   })
   @ApiResponse({
     status: 302,
-    description: '로그인 성공 후 프론트엔드로 리다이렉트',
+    description: '로그인 성공 후 앱/프론트 콜백 URL로 리다이렉트',
+  })
+  @ApiResponse({
+    status: 401,
+    description: '카카오 이메일 동의 미완료 (Email consent is required)',
+  })
+  @ApiResponse({
+    status: 500,
+    description: '카카오 토큰 교환/프로필 조회 실패 또는 서버 설정 오류',
   })
   async kakaoAuthRedirect(@Req() req: OAuthRequest, @Res() res: Response) {
     const { access_token } = await this.authService.oAuthLogin(req.user);

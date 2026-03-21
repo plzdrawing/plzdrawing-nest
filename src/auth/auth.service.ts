@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { MemberService } from '../member/member.service';
@@ -8,7 +8,7 @@ import { MemberProvider, MemberRole } from '../common/enums';
 export type AuthenticatedMember = Omit<Member, 'password'>;
 
 export interface OAuthUser {
-  email: string;
+  email?: string;
   nickname?: string;
   firstName?: string;
   provider: 'google' | 'kakao';
@@ -54,6 +54,12 @@ export class AuthService {
   }
 
   async oAuthLogin(user: OAuthUser): Promise<{ access_token: string }> {
+    if (!user.email) {
+      throw new UnauthorizedException(
+        'Email consent is required for social login',
+      );
+    }
+
     let member = await this.memberService.findByEmail(user.email);
 
     if (!member) {

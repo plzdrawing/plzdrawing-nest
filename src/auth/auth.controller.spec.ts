@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MemberRole } from '../common/enums';
 
 describe('AuthController', () => {
@@ -14,6 +15,15 @@ describe('AuthController', () => {
     oAuthLogin: jest.fn(),
   };
 
+  const mockConfigService = {
+    get: jest.fn((key: string) => {
+      if (key === 'OAUTH_REDIRECT_URL') {
+        return 'http://localhost:3000/oauth/callback';
+      }
+      return null;
+    }),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -23,6 +33,10 @@ describe('AuthController', () => {
         {
           provide: AuthService,
           useValue: mockAuthService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();

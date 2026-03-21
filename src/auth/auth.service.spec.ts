@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { MemberService } from '../member/member.service';
+import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { MemberProvider, MemberRole } from '../common/enums';
 
@@ -123,6 +124,14 @@ describe('AuthService', () => {
   });
 
   describe('oAuthLogin', () => {
+    it('소셜 계정 이메일이 없으면 UnauthorizedException을 던진다', async () => {
+      await expect(
+        service.oAuthLogin({
+          provider: 'kakao',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
     it('기존 회원이면 생성 없이 토큰만 발급한다', async () => {
       const member = {
         id: 10,
