@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule, type JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -9,6 +9,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { KakaoStrategy } from './strategies/kakao.strategy';
 import { KakaoAuthGuard } from './guards/kakao-auth.guard';
+import { assertRequiredAuthEnv, REQUIRED_AUTH_ENV_KEYS } from './auth-env';
 
 @Module({
   imports: [
@@ -41,4 +42,19 @@ import { KakaoAuthGuard } from './guards/kakao-auth.guard';
   controllers: [AuthController],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule implements OnModuleInit {
+  constructor(private readonly configService: ConfigService) {}
+
+  onModuleInit(): void {
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+    const authEnv = REQUIRED_AUTH_ENV_KEYS.reduce<
+      Record<string, string | undefined>
+    >((acc, key) => {
+      acc[key] = this.configService.get<string>(key);
+      return acc;
+    }, {});
+
+    assertRequiredAuthEnv(authEnv, isProduction);
+  }
+}
