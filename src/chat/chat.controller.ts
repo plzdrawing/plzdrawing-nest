@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -129,6 +132,31 @@ export class ChatController {
     @Param('id') id: string,
   ): Promise<ChatRoomDetailResponseDto> {
     return this.chatService.getChatRoomDetail(member, +id);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '채팅방 삭제',
+    description:
+      '채팅방과 해당 메시지를 삭제합니다. CANCELLED 또는 REVIEWED 상태에서만 삭제할 수 있습니다.',
+  })
+  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
+  @ApiResponse({ status: 204, description: '채팅방 삭제 성공' })
+  @ApiResponse({
+    status: 400,
+    description: '삭제 가능한 상태가 아님 (CANCELLED/REVIEWED만 가능)',
+  })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
+  @ApiResponse({ status: 404, description: '채팅방을 찾을 수 없음' })
+  async deleteChatRoom(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await this.chatService.deleteChatRoom(member, +id);
   }
 
   @Patch(':id/status')

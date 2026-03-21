@@ -190,6 +190,26 @@ export class ChatService {
     return this.mapChatRoomDetail(chatRoom);
   }
 
+  async deleteChatRoom(member: Member, chatRoomId: number): Promise<void> {
+    const chatRoom = await this.chatRoomRepository.findOne({
+      where: { id: chatRoomId },
+    });
+    if (!chatRoom) throw new NotFoundException('Chat room not found');
+    this.assertMember(chatRoom, member.id);
+
+    if (
+      chatRoom.status !== ChatRoomStatus.CANCELLED &&
+      chatRoom.status !== ChatRoomStatus.REVIEWED
+    ) {
+      throw new BadRequestException(
+        'Can only delete chat room in CANCELLED or REVIEWED status',
+      );
+    }
+
+    await this.messageRepository.delete({ chatRoomId: chatRoom.id });
+    await this.chatRoomRepository.delete(chatRoom.id);
+  }
+
   async updateChatRoomStatus(
     member: Member,
     chatRoomId: number,

@@ -98,12 +98,14 @@ describe('ChatService', () => {
       create: jest.fn(),
       save: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       createQueryBuilder: jest.fn(),
     };
 
     messageRepository = {
       create: jest.fn(),
       save: jest.fn(),
+      delete: jest.fn(),
       findOne: jest.fn(),
       count: jest.fn(),
       createQueryBuilder: jest.fn(),
@@ -302,6 +304,37 @@ describe('ChatService', () => {
       expect(result.status).toBe(ChatRoomStatus.REQUESTED);
       expect(result.requester.id).toBe(requester.id);
       expect(result.artist.id).toBe(artist.id);
+    });
+  });
+
+  describe('deleteChatRoom', () => {
+    it('삭제 가능한 상태가 아니면 잘못된 요청 예외를 던져야 한다', async () => {
+      chatRoomRepository.findOne.mockResolvedValue({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        status: ChatRoomStatus.REQUESTED,
+      } as ChatRoom);
+
+      await expect(service.deleteChatRoom(requester, 1)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('참여자면 메시지와 채팅방을 삭제해야 한다', async () => {
+      chatRoomRepository.findOne.mockResolvedValue({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        status: ChatRoomStatus.CANCELLED,
+      } as ChatRoom);
+      messageRepository.delete.mockResolvedValue(undefined);
+      chatRoomRepository.delete.mockResolvedValue(undefined);
+
+      await service.deleteChatRoom(requester, 1);
+
+      expect(messageRepository.delete).toHaveBeenCalledWith({ chatRoomId: 1 });
+      expect(chatRoomRepository.delete).toHaveBeenCalledWith(1);
     });
   });
 

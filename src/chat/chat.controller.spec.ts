@@ -17,6 +17,7 @@ describe('ChatController', () => {
     createChatRoom: jest.Mock;
     getChatRooms: jest.Mock;
     getChatRoomDetail: jest.Mock;
+    deleteChatRoom: jest.Mock;
     updateChatRoomStatus: jest.Mock;
     getMessages: jest.Mock;
     sendMessage: jest.Mock;
@@ -29,6 +30,7 @@ describe('ChatController', () => {
       createChatRoom: jest.fn(),
       getChatRooms: jest.fn(),
       getChatRoomDetail: jest.fn(),
+      deleteChatRoom: jest.fn(),
       updateChatRoomStatus: jest.fn(),
       getMessages: jest.fn(),
       sendMessage: jest.fn(),
@@ -98,6 +100,15 @@ describe('ChatController', () => {
 
     expect(chatService.getChatRoomDetail).toHaveBeenCalledWith(member, 30);
     expect(result).toEqual(expected);
+  });
+
+  it('채팅방 삭제 시 식별자를 변환해 서비스로 전달해야 한다', async () => {
+    const member = { id: 1 } as Member;
+    chatService.deleteChatRoom.mockResolvedValue(undefined);
+
+    await controller.deleteChatRoom(member, '30');
+
+    expect(chatService.deleteChatRoom).toHaveBeenCalledWith(member, 30);
   });
 
   it('채팅방 상태 변경 시 식별자를 변환해 서비스로 전달해야 한다', async () => {
