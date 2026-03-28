@@ -7,6 +7,7 @@ import { Review } from '../entities/review.entity';
 import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { MemberService } from './member.service';
+import { MemberQueryService } from './member-query.service';
 import { MemberController } from './member.controller';
 import { AwsModule } from '../common/aws/aws.module';
 import { TagModule } from '../tag/tag.module';
@@ -24,7 +25,7 @@ import { TagModule } from '../tag/tag.module';
     AwsModule,
     TagModule,
   ],
-  providers: [MemberService],
+  providers: [MemberService, MemberQueryService],
   controllers: [MemberController],
   exports: [MemberService],
 })

@@ -1,12 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MemberService } from './member.service';
+import { MemberQueryService } from './member-query.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
-import { Post } from '../entities/post.entity';
-import { Review } from '../entities/review.entity';
-import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
-import { ChatRoom } from '../entities/chat-room.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import {
@@ -23,10 +20,7 @@ describe('MemberService', () => {
 
   let memberRepository: any;
   let profileRepository: any;
-  let postRepository: any;
-  let reviewRepository: any;
-  let reviewKeywordMapRepository: any;
-  let chatRoomRepository: any;
+  let memberQueryService: any;
   let awsService: any;
   let tagService: any;
 
@@ -46,18 +40,14 @@ describe('MemberService', () => {
       save: jest.fn(),
       findOne: jest.fn(),
     };
-    postRepository = {
-      count: jest.fn(),
-    };
-    reviewRepository = {
-      find: jest.fn(),
-      findAndCount: jest.fn(),
-    };
-    reviewKeywordMapRepository = {
-      find: jest.fn(),
-    };
-    chatRoomRepository = {
-      count: jest.fn(),
+    memberQueryService = {
+      findActiveMemberWithProfileAndTags: jest.fn(),
+      existsActiveMember: jest.fn(),
+      countMemberPosts: jest.fn(),
+      findReceiverReviewStars: jest.fn(),
+      countCompletedWorks: jest.fn(),
+      findKeywordMapsByReviewIds: jest.fn(),
+      findPublicReviews: jest.fn(),
     };
     awsService = {
       uploadFile: jest.fn(),
@@ -79,28 +69,16 @@ describe('MemberService', () => {
           useValue: profileRepository,
         },
         {
-          provide: getRepositoryToken(Post),
-          useValue: postRepository,
-        },
-        {
-          provide: getRepositoryToken(Review),
-          useValue: reviewRepository,
-        },
-        {
-          provide: getRepositoryToken(ReviewKeywordMap),
-          useValue: reviewKeywordMapRepository,
-        },
-        {
-          provide: getRepositoryToken(ChatRoom),
-          useValue: chatRoomRepository,
-        },
-        {
           provide: AwsService,
           useValue: awsService,
         },
         {
           provide: TagService,
           useValue: tagService,
+        },
+        {
+          provide: MemberQueryService,
+          useValue: memberQueryService,
         },
       ],
     }).compile();
@@ -338,7 +316,9 @@ describe('MemberService', () => {
 
   describe('getPublicProfile', () => {
     it('회원이 없으면 NotFoundException을 던진다', async () => {
-      memberRepository.findOne.mockResolvedValue(null);
+      memberQueryService.findActiveMemberWithProfileAndTags.mockResolvedValue(
+        null,
+      );
 
       await expect(service.getPublicProfile(2)).rejects.toThrow(
         NotFoundException,
@@ -346,7 +326,7 @@ describe('MemberService', () => {
     });
 
     it('공개 프로필 응답을 구성한다', async () => {
-      memberRepository.findOne.mockResolvedValue({
+      memberQueryService.findActiveMemberWithProfileAndTags.mockResolvedValue({
         id: 2,
         nickname: 'artist',
         profile: {
@@ -359,13 +339,11 @@ describe('MemberService', () => {
           { status: TagStatus.ACTIVE, tag: { name: '#누사' } },
         ],
       });
-      postRepository.count.mockResolvedValue(7);
+      memberQueryService.countMemberPosts.mockResolvedValue(7);
 
       const result = await service.getPublicProfile(2);
 
-      expect(postRepository.count).toHaveBeenCalledWith({
-        where: { memberId: 2 },
-      });
+      expect(memberQueryService.countMemberPosts).toHaveBeenCalledWith(2);
       expect(result).toEqual(
         expect.objectContaining({
           memberId: 2,
@@ -381,7 +359,7 @@ describe('MemberService', () => {
 
   describe('getPublicReviewSummary', () => {
     it('회원이 없으면 NotFoundException을 던진다', async () => {
-      memberRepository.findOne.mockResolvedValue(null);
+      memberQueryService.existsActiveMember.mockResolvedValue(false);
 
       await expect(service.getPublicReviewSummary(10)).rejects.toThrow(
         NotFoundException,
@@ -389,14 +367,14 @@ describe('MemberService', () => {
     });
 
     it('후기/키워드/완료작업 집계를 반환한다', async () => {
-      memberRepository.findOne.mockResolvedValue({ id: 10 });
-      reviewRepository.find.mockResolvedValue([
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findReceiverReviewStars.mockResolvedValue([
         { id: 1, star: ReviewStar.FIVE },
         { id: 2, star: ReviewStar.FOUR },
         { id: 3, star: ReviewStar.ONE },
       ]);
-      chatRoomRepository.count.mockResolvedValue(9);
-      reviewKeywordMapRepository.find.mockResolvedValue([
+      memberQueryService.countCompletedWorks.mockResolvedValue(9);
+      memberQueryService.findKeywordMapsByReviewIds.mockResolvedValue([
         { keyword: { keyword: '친절해요', isActive: true } },
         { keyword: { keyword: '친절해요', isActive: true } },
         { keyword: { keyword: '귀여워요', isActive: true } },
@@ -408,16 +386,10 @@ describe('MemberService', () => {
 
       const result = await service.getPublicReviewSummary(10);
 
-      expect(reviewRepository.find).toHaveBeenCalledWith({
-        where: { receiverId: 10 },
-        select: ['id', 'star'],
-      });
-      expect(chatRoomRepository.count).toHaveBeenCalledWith({
-        where: {
-          artistId: 10,
-          status: expect.any(Object),
-        },
-      });
+      expect(memberQueryService.findReceiverReviewStars).toHaveBeenCalledWith(
+        10,
+      );
+      expect(memberQueryService.countCompletedWorks).toHaveBeenCalledWith(10);
       expect(result).toEqual(
         expect.objectContaining({
           averageStar: 3.33,
@@ -438,13 +410,15 @@ describe('MemberService', () => {
     });
 
     it('후기가 없으면 0 집계를 반환한다', async () => {
-      memberRepository.findOne.mockResolvedValue({ id: 11 });
-      reviewRepository.find.mockResolvedValue([]);
-      chatRoomRepository.count.mockResolvedValue(0);
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findReceiverReviewStars.mockResolvedValue([]);
+      memberQueryService.countCompletedWorks.mockResolvedValue(0);
 
       const result = await service.getPublicReviewSummary(11);
 
-      expect(reviewKeywordMapRepository.find).not.toHaveBeenCalled();
+      expect(
+        memberQueryService.findKeywordMapsByReviewIds,
+      ).not.toHaveBeenCalled();
       expect(result).toEqual(
         expect.objectContaining({
           averageStar: 0,
@@ -458,7 +432,7 @@ describe('MemberService', () => {
 
   describe('getPublicReviews', () => {
     it('회원이 없으면 NotFoundException을 던진다', async () => {
-      memberRepository.findOne.mockResolvedValue(null);
+      memberQueryService.existsActiveMember.mockResolvedValue(false);
 
       await expect(
         service.getPublicReviews(99, { page: 1, limit: 10 } as any),
@@ -467,8 +441,8 @@ describe('MemberService', () => {
 
     it('후기 목록을 페이지네이션으로 반환한다', async () => {
       const createdAt = new Date('2026-03-28T00:00:00.000Z');
-      memberRepository.findOne.mockResolvedValue({ id: 5 });
-      reviewRepository.findAndCount.mockResolvedValue([
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findPublicReviews.mockResolvedValue([
         [
           {
             id: 10,
@@ -496,12 +470,10 @@ describe('MemberService', () => {
         limit: 3,
       } as any);
 
-      expect(reviewRepository.findAndCount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { receiverId: 5 },
-          skip: 3,
-          take: 3,
-        }),
+      expect(memberQueryService.findPublicReviews).toHaveBeenCalledWith(
+        5,
+        2,
+        3,
       );
       expect(result).toEqual({
         data: [

@@ -11,7 +11,6 @@ import * as bcrypt from 'bcrypt';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
 import {
-  ChatRoomStatus,
   MemberRole,
   MemberStatus,
   ReviewStar,
@@ -23,10 +22,6 @@ import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { Post } from '../entities/post.entity';
-import { Review } from '../entities/review.entity';
-import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
-import { ChatRoom } from '../entities/chat-room.entity';
 import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
 import {
   PublicReviewSummaryResponseDto,
@@ -36,6 +31,7 @@ import {
   PublicReviewListItemDto,
   PublicReviewListResponseDto,
 } from './dto/public-review-list-response.dto';
+import { MemberQueryService } from './member-query.service';
 
 @Injectable()
 export class MemberService {
@@ -46,16 +42,9 @@ export class MemberService {
     private readonly memberRepository: Repository<Member>,
     @InjectRepository(Profile)
     private readonly profileRepository: Repository<Profile>,
-    @InjectRepository(Post)
-    private readonly postRepository: Repository<Post>,
-    @InjectRepository(Review)
-    private readonly reviewRepository: Repository<Review>,
-    @InjectRepository(ReviewKeywordMap)
-    private readonly reviewKeywordMapRepository: Repository<ReviewKeywordMap>,
-    @InjectRepository(ChatRoom)
-    private readonly chatRoomRepository: Repository<ChatRoom>,
     private readonly awsService: AwsService,
     private readonly tagService: TagService,
+    private readonly memberQueryService: MemberQueryService,
   ) {}
 
   async create(data: Partial<Member>): Promise<Member> {
@@ -197,18 +186,18 @@ export class MemberService {
   }
 
   async getPublicProfile(memberId: number): Promise<PublicProfileResponseDto> {
-    const member = await this.memberRepository.findOne({
-      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
-      relations: ['profile', 'memberTags', 'memberTags.tag'],
-    });
+    const member =
+      await this.memberQueryService.findActiveMemberWithProfileAndTags(
+        memberId,
+      );
     if (!member) throw new NotFoundException('Member not found');
 
     const activeTags = member.memberTags
       .filter((mt) => mt.status === TagStatus.ACTIVE)
       .map((mt) => mt.tag.name);
-    const drawingCount = await this.postRepository.count({
-      where: { memberId: member.id },
-    });
+    const drawingCount = await this.memberQueryService.countMemberPosts(
+      member.id,
+    );
 
     return new PublicProfileResponseDto(
       member.id,
@@ -223,16 +212,11 @@ export class MemberService {
   async getPublicReviewSummary(
     memberId: number,
   ): Promise<PublicReviewSummaryResponseDto> {
-    const member = await this.memberRepository.findOne({
-      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
-      select: ['id'],
-    });
-    if (!member) throw new NotFoundException('Member not found');
+    const exists = await this.memberQueryService.existsActiveMember(memberId);
+    if (!exists) throw new NotFoundException('Member not found');
 
-    const reviews = await this.reviewRepository.find({
-      where: { receiverId: memberId },
-      select: ['id', 'star'],
-    });
+    const reviews =
+      await this.memberQueryService.findReceiverReviewStars(memberId);
 
     const reviewCount = reviews.length;
     const averageStar =
@@ -247,20 +231,14 @@ export class MemberService {
           )
         : 0;
 
-    const completedWorkCount = await this.chatRoomRepository.count({
-      where: {
-        artistId: memberId,
-        status: In([ChatRoomStatus.COMPLETED, ChatRoomStatus.REVIEWED]),
-      },
-    });
+    const completedWorkCount =
+      await this.memberQueryService.countCompletedWorks(memberId);
 
     let topKeywords: ReviewKeywordCountDto[] = [];
     if (reviews.length > 0) {
       const reviewIds = reviews.map((review) => review.id);
-      const maps = await this.reviewKeywordMapRepository.find({
-        where: { reviewId: In(reviewIds) },
-        relations: ['keyword'],
-      });
+      const maps =
+        await this.memberQueryService.findKeywordMapsByReviewIds(reviewIds);
 
       const keywordCounter = new Map<string, number>();
       maps.forEach((map) => {
@@ -294,25 +272,15 @@ export class MemberService {
     memberId: number,
     paginationDto: PaginationDto,
   ): Promise<PublicReviewListResponseDto> {
-    const member = await this.memberRepository.findOne({
-      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
-      select: ['id'],
-    });
-    if (!member) throw new NotFoundException('Member not found');
+    const exists = await this.memberQueryService.existsActiveMember(memberId);
+    if (!exists) throw new NotFoundException('Member not found');
 
     const { page = 1, limit = 10 } = paginationDto;
-    const [reviews, total] = await this.reviewRepository.findAndCount({
-      where: { receiverId: memberId },
-      relations: [
-        'writer',
-        'writer.profile',
-        'reviewKeywordMaps',
-        'reviewKeywordMaps.keyword',
-      ],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const [reviews, total] = await this.memberQueryService.findPublicReviews(
+      memberId,
+      page,
+      limit,
+    );
 
     const data = reviews.map((review) => {
       const keywords = review.reviewKeywordMaps
