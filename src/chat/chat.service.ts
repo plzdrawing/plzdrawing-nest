@@ -93,11 +93,21 @@ export class ChatService {
       return { isExisting: true, chatRoom };
     }
 
+    if (
+      dto.referenceImageObjectKeys &&
+      dto.referenceImageObjectKeys.length > 0
+    ) {
+      dto.referenceImageObjectKeys.forEach((key) =>
+        this.assertRequestImageObjectKey(key, member.id),
+      );
+    }
+
     const chatRoom = this.chatRoomRepository.create({
       postId: post.id,
       requesterId: member.id,
       artistId,
       description: dto.description,
+      referenceImageObjectKeys: dto.referenceImageObjectKeys ?? [],
       price: dto.price,
       status: ChatRoomStatus.REQUESTED,
     });
@@ -110,6 +120,29 @@ export class ChatService {
       isExisting: false,
       chatRoom: await this.getChatRoomDetail(member, saved.id),
     };
+  }
+
+  async createRequestImageUpload(
+    member: Member,
+    dto: ChatImageUploadRequestDto,
+  ): Promise<ChatImageUploadResponseDto> {
+    this.assertImageUpload(dto);
+
+    const objectKey = this.buildRequestImageObjectKey(
+      member.id,
+      dto.fileName,
+      dto.contentType,
+    );
+    const uploadUrl = await this.awsService.createPresignedUploadUrl(
+      objectKey,
+      dto.contentType,
+      CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS,
+    );
+    const expiresAt = new Date(
+      Date.now() + CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS * 1000,
+    ).toISOString();
+
+    return { uploadUrl, objectKey, expiresAt };
   }
 
   async getChatRooms(
@@ -719,6 +752,7 @@ export class ChatService {
       title: post.title,
       price: chatRoom.price ?? null,
       description: chatRoom.description ?? null,
+      referenceImageObjectKeys: chatRoom.referenceImageObjectKeys ?? [],
     });
 
     const message = this.messageRepository.create({
@@ -782,6 +816,7 @@ export class ChatService {
       requester: this.mapUser(chatRoom.requester),
       artist: this.mapUser(chatRoom.artist),
       description: chatRoom.description ?? undefined,
+      referenceImageObjectKeys: chatRoom.referenceImageObjectKeys ?? [],
       price: chatRoom.price ?? undefined,
       paidAmount: chatRoom.paidAmount ?? undefined,
       createdAt: chatRoom.createdAt,
@@ -890,6 +925,18 @@ export class ChatService {
     return `chat/${chatRoomId}/${year}/${month}/${randomUUID()}${ext}`;
   }
 
+  private buildRequestImageObjectKey(
+    memberId: number,
+    fileName: string,
+    contentType: string,
+  ): string {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+    const ext = this.resolveImageExtension(fileName, contentType);
+    return `chat/request/${memberId}/${year}/${month}/${randomUUID()}${ext}`;
+  }
+
   private resolveImageExtension(fileName: string, contentType: string): string {
     const extFromType = this.getImageExtension(contentType);
     if (!extFromType) {
@@ -919,6 +966,16 @@ export class ChatService {
     const expectedPrefix = `chat/${chatRoomId}/`;
     if (!objectKey.startsWith(expectedPrefix) || objectKey.includes('..')) {
       throw new BadRequestException('Invalid object key');
+    }
+  }
+
+  private assertRequestImageObjectKey(
+    objectKey: string,
+    memberId: number,
+  ): void {
+    const expectedPrefix = `chat/request/${memberId}/`;
+    if (!objectKey.startsWith(expectedPrefix) || objectKey.includes('..')) {
+      throw new BadRequestException('Invalid request image object key');
     }
   }
 

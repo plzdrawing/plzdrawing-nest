@@ -214,6 +214,7 @@ describe('ChatService', () => {
         requesterId: requester.id,
         artistId: artist.id,
         description: 'request',
+        referenceImageObjectKeys: ['chat/request/1/2026/02/sample.png'],
         price: 10000,
         status: ChatRoomStatus.REQUESTED,
       } as ChatRoom;
@@ -228,6 +229,7 @@ describe('ChatService', () => {
         postId: post.id,
         description: 'request',
         price: 10000,
+        referenceImageObjectKeys: ['chat/request/1/2026/02/sample.png'],
       };
 
       postRepository.findOne.mockResolvedValue(post);
@@ -246,6 +248,7 @@ describe('ChatService', () => {
           postId: post.id,
           requesterId: requester.id,
           artistId: artist.id,
+          referenceImageObjectKeys: ['chat/request/1/2026/02/sample.png'],
           status: ChatRoomStatus.REQUESTED,
         }),
       );
@@ -264,6 +267,20 @@ describe('ChatService', () => {
         isExisting: false,
         chatRoom: detail,
       });
+    });
+
+    it('참고 이미지 object key가 유효하지 않으면 예외를 던져야 한다', async () => {
+      postRepository.findOne.mockResolvedValue(post);
+      chatRoomRepository.findOne.mockResolvedValue(null);
+      const dto: CreateChatRoomDto = {
+        postId: post.id,
+        referenceImageObjectKeys: ['chat/request/999/2026/02/sample.png'],
+      };
+
+      await expect(service.createChatRoom(requester, dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(chatRoomRepository.create).not.toHaveBeenCalled();
     });
   });
 
@@ -441,6 +458,42 @@ describe('ChatService', () => {
       );
       expect(result.uploadUrl).toBe('https://upload.example.com');
       expect(result.objectKey.startsWith('chat/200/')).toBe(true);
+      expect(new Date(result.expiresAt).toString()).not.toBe('Invalid Date');
+    });
+  });
+
+  describe('createRequestImageUpload', () => {
+    it('허용되지 않은 콘텐츠 타입이면 잘못된 요청 예외를 던져야 한다', async () => {
+      const dto: ChatImageUploadRequestDto = {
+        fileName: 'bad.gif',
+        contentType: 'image/gif',
+        size: 1000,
+      };
+
+      await expect(
+        service.createRequestImageUpload(requester, dto),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('정상 요청이면 요청 참고 이미지 업로드 URL을 반환해야 한다', async () => {
+      awsService.createPresignedUploadUrl.mockResolvedValue(
+        'https://upload.example.com',
+      );
+      const dto: ChatImageUploadRequestDto = {
+        fileName: 'reference.png',
+        contentType: 'image/png',
+        size: 2048,
+      };
+
+      const result = await service.createRequestImageUpload(requester, dto);
+
+      expect(awsService.createPresignedUploadUrl).toHaveBeenCalledWith(
+        expect.stringMatching(/^chat\/request\/1\/\d{4}\/\d{2}\/.+\.png$/),
+        'image/png',
+        expect.any(Number),
+      );
+      expect(result.uploadUrl).toBe('https://upload.example.com');
+      expect(result.objectKey.startsWith('chat/request/1/')).toBe(true);
       expect(new Date(result.expiresAt).toString()).not.toBe('Invalid Date');
     });
   });

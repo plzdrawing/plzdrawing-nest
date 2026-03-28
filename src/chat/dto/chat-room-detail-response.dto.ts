@@ -25,6 +25,13 @@ export class ChatRoomDetailResponseDto {
   })
   description?: string;
 
+  @ApiPropertyOptional({
+    description: '참고 이미지 object key 목록',
+    type: [String],
+    example: ['chat/request/1/2026/03/uuid1.png'],
+  })
+  referenceImageObjectKeys?: string[];
+
   @ApiPropertyOptional({ description: '요청 금액', example: 5000 })
   price?: number;
 
