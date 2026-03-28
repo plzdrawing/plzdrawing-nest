@@ -11,11 +11,7 @@ import { MemberService } from '../member/member.service';
 import { DataSource } from 'typeorm';
 import { PostFeedQueryRepository } from './query/post-feed.query.repository';
 import { PostFeedMapper } from './mapper/post-feed.mapper';
-import {
-  ForbiddenException,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 describe('PostService', () => {
   let service: PostService;
@@ -43,6 +39,7 @@ describe('PostService', () => {
     postImageRepository = {};
     awsService = {
       uploadFiles: jest.fn(),
+      deleteFile: jest.fn(),
     };
     tagService = {
       findTagsByContentIds: jest.fn(),
@@ -71,6 +68,9 @@ describe('PostService', () => {
       manager: {
         create: jest.fn((_: any, data: any) => ({ ...data })),
         save: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        find: jest.fn(),
       },
     };
     dataSource = {
@@ -476,52 +476,83 @@ describe('PostService', () => {
       await expect(service.findOne(1)).resolves.toEqual({ id: 1 });
     });
 
-    it('update는 저장 후 상세를 반환하고 remove는 삭제를 위임한다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 7, content: 'updated' });
+    it('update는 작성자 본인 요청이면 수정 후 상세를 반환한다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
+      queryRunner.manager.find.mockResolvedValue([]);
+      jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ id: 7, content: 'updated' } as any);
 
-      await expect(service.update(7, { content: 'updated' })).resolves.toEqual({
+      await expect(
+        service.update(7, { id: 10 } as any, { content: 'updated' } as any),
+      ).resolves.toEqual({
         id: 7,
         content: 'updated',
       });
-      expect(postRepository.update).toHaveBeenCalledWith(7, {
+
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
         content: 'updated',
       });
-
-      await service.remove(7);
-      expect(postRepository.delete).toHaveBeenCalledWith(7);
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
+        thumbnailUrl: null,
+      });
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
     });
-  });
 
-  describe('updateByOwner/removeByOwner', () => {
-    it('작성자가 아니면 updateByOwner는 ForbiddenException을 던진다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
+    it('update는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
 
       await expect(
-        service.updateByOwner(1, { id: 99 } as any, { content: 'x' } as any),
-      ).rejects.toThrow(ForbiddenException);
+        service.update(7, { id: 99 } as any, { content: 'updated' } as any),
+      ).rejects.toThrow('게시글 수정 권한이 없습니다.');
     });
 
-    it('작성자가 아니면 removeByOwner는 ForbiddenException을 던진다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
+    it('update는 최종 이미지 개수가 3개를 넘으면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      });
 
-      await expect(service.removeByOwner(1, { id: 99 } as any)).rejects.toThrow(
-        ForbiddenException,
+      await expect(
+        service.update(
+          7,
+          { id: 10 } as any,
+          { content: 'updated' } as any,
+          [{ originalname: '1.png' }] as any,
+        ),
+      ).rejects.toThrow('이미지는 최대 3개까지 유지할 수 있습니다.');
+    });
+
+    it('remove는 작성자 본인만 삭제할 수 있다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await service.remove(7, { id: 1 } as any);
+      expect(postRepository.delete).toHaveBeenCalledWith(7);
+    });
+
+    it('remove는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await expect(service.remove(7, { id: 2 } as any)).rejects.toThrow(
+        '게시글 삭제 권한이 없습니다.',
       );
     });
 
-    it('작성자면 updateByOwner/removeByOwner가 수행된다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 5, memberId: 20 });
-      const updateSpy = jest
-        .spyOn(service, 'update')
-        .mockResolvedValue({ id: 5 } as any);
+    it('remove는 게시글이 없으면 NotFoundException을 던진다', async () => {
+      postRepository.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.updateByOwner(5, { id: 20 } as any, { content: 'ok' } as any),
-      ).resolves.toEqual({ id: 5 });
-      expect(updateSpy).toHaveBeenCalledWith(5, { content: 'ok' });
-
-      await service.removeByOwner(5, { id: 20 } as any);
-      expect(postRepository.delete).toHaveBeenCalledWith(5);
+      await expect(service.remove(999, { id: 1 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

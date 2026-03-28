@@ -10,8 +10,8 @@ describe('PostController', () => {
     getLatestContents: jest.fn(),
     getMemberContents: jest.fn(),
     findOne: jest.fn(),
-    updateByOwner: jest.fn(),
-    removeByOwner: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -46,7 +46,7 @@ describe('PostController', () => {
     expect(mockPostService.create).toHaveBeenCalledWith(req.user, body, files);
   });
 
-  it('getLatestContents는 paginationDto를 그대로 전달한다', async () => {
+  it('getLatestContents는 member.id를 함께 전달한다', async () => {
     const member = { id: 33 };
     const dto = { page: 1, limit: 10, q: '곰', scrappedOnly: false };
     mockPostService.getLatestContents.mockResolvedValue({ data: [] });
@@ -76,26 +76,38 @@ describe('PostController', () => {
     expect(mockPostService.findOne).toHaveBeenCalledWith(5);
   });
 
-  it('update는 id를 숫자로 변환해 전달한다', async () => {
-    mockPostService.updateByOwner.mockResolvedValue({ id: 8 });
+  it('update는 id와 newImages를 서비스에 전달한다', async () => {
+    mockPostService.update.mockResolvedValue({ id: 8 });
     const req = { user: { id: 10 } };
     const body = { content: 'updated' };
+    const files = { newImages: [{ originalname: 'c.png' }] };
 
-    await controller.update(req as any, '8', body as any);
+    await controller.update(req as any, '8', body as any, files as any);
 
-    expect(mockPostService.updateByOwner).toHaveBeenCalledWith(
+    expect(mockPostService.update).toHaveBeenCalledWith(
       8,
       req.user,
       body,
+      files.newImages,
     );
   });
 
-  it('remove는 id를 숫자로 변환해 전달한다', async () => {
-    mockPostService.removeByOwner.mockResolvedValue(undefined);
+  it('update는 파일이 없으면 빈 배열을 전달한다', async () => {
+    mockPostService.update.mockResolvedValue({ id: 8 });
     const req = { user: { id: 10 } };
+    const body = { content: 'updated' };
+
+    await controller.update(req as any, '8', body as any, undefined as any);
+
+    expect(mockPostService.update).toHaveBeenCalledWith(8, req.user, body, []);
+  });
+
+  it('remove는 id를 숫자로 변환해 전달한다', async () => {
+    mockPostService.remove.mockResolvedValue(undefined);
+    const req = { user: { id: 3 } };
 
     await controller.remove(req as any, '9');
 
-    expect(mockPostService.removeByOwner).toHaveBeenCalledWith(9, req.user);
+    expect(mockPostService.remove).toHaveBeenCalledWith(9, req.user);
   });
 });
