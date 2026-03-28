@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Brackets } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Post } from '../entities/post.entity';
 import { PostImage } from '../entities/post-image.entity';
 import { Member } from '../entities/member.entity';
@@ -17,9 +17,9 @@ import { ReviewService } from '../review/review.service';
 import { MemberService } from '../member/member.service';
 import { LatestContentsResponse } from './dto/latest-contents-response.dto';
 import { ContentsDto } from './dto/contents.dto';
-import { UploaderDto } from './dto/uploader.dto';
 import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
-import { TagStatus } from '../common/enums';
+import { PostFeedQueryRepository } from './query/post-feed.query.repository';
+import { PostFeedMapper } from './mapper/post-feed.mapper';
 
 @Injectable()
 export class PostService {
@@ -34,6 +34,8 @@ export class PostService {
     private readonly reviewService: ReviewService,
     private readonly memberService: MemberService,
     private readonly dataSource: DataSource,
+    private readonly postFeedQueryRepository: PostFeedQueryRepository,
+    private readonly postFeedMapper: PostFeedMapper,
   ) {}
 
   async create(
@@ -140,51 +142,14 @@ export class PostService {
     page: number;
     limit: number;
   }> {
-    const { page = 1, limit = 10, q, scrappedOnly } = queryDto;
-
-    const qb = this.postRepository
-      .createQueryBuilder('post')
-      .leftJoinAndSelect('post.member', 'member')
-      .leftJoinAndSelect('post.images', 'images')
-      .leftJoin(
-        'post.postTags',
-        'postTag',
-        'postTag.status = :activeTagStatus',
-        {
-          activeTagStatus: TagStatus.ACTIVE,
-        },
-      )
-      .leftJoin('postTag.tag', 'tag');
-
-    const keyword = q?.trim();
-    if (keyword) {
-      qb.andWhere(
-        new Brackets((subQb) => {
-          subQb
-            .where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
-            .orWhere('post.content LIKE :keyword', { keyword: `%${keyword}%` })
-            .orWhere('tag.name LIKE :keyword', { keyword: `%${keyword}%` });
-        }),
+    if (queryDto.scrappedOnly && !memberId) {
+      throw new UnauthorizedException(
+        'Authentication required for scrappedOnly filter',
       );
     }
 
-    if (scrappedOnly) {
-      if (!memberId) {
-        throw new UnauthorizedException(
-          'Authentication required for scrappedOnly filter',
-        );
-      }
-      qb.innerJoin('post.scraps', 'scrap', 'scrap.memberId = :memberId', {
-        memberId,
-      });
-    }
-
-    qb.orderBy('post.createdAt', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit)
-      .distinct(true);
-
-    const [posts, total] = await qb.getManyAndCount();
+    const { posts, total, page, limit } =
+      await this.postFeedQueryRepository.findLatestPosts(queryDto, memberId);
 
     if (posts.length === 0) {
       return { data: [], total, page, limit };
@@ -203,31 +168,13 @@ export class PostService {
 
     const data = posts.map((post) => {
       const uploaderId = post.memberId;
-      const stats = reviewStatsMap.get(uploaderId) || {
-        reviewCount: 0,
-        star: 0,
-      };
-
-      const uploaderDto = new UploaderDto(
-        post.member.nickname,
-        profileMap.get(uploaderId),
-        drawingCountMap.get(uploaderId) || 0,
-        stats.reviewCount,
-        stats.star,
-      );
-
-      const contentsDto = new ContentsDto(
-        post.id,
-        post.createdAt,
-        post.images.map((img) => img.imageUrl),
-        tagMap.get(post.id) || [],
-        post.content,
-        post.timeTaken ?? '',
-        post.price ?? 0,
-        likeMap.get(post.id) || 0,
-      );
-
-      return new LatestContentsResponse(uploaderDto, contentsDto);
+      return this.postFeedMapper.toLatestContentsResponse(post, {
+        tags: tagMap.get(post.id) || [],
+        likeCount: likeMap.get(post.id) || 0,
+        profileImageUrl: profileMap.get(uploaderId),
+        drawingCount: drawingCountMap.get(uploaderId) || 0,
+        reviewStat: reviewStatsMap.get(uploaderId),
+      });
     });
 
     return { data, total, page, limit };
@@ -259,18 +206,12 @@ export class PostService {
     const tagMap = await this.tagService.findTagsByContentIds(contentIds);
     const likeMap = await this.likeService.countLikesByContentIds(contentIds);
 
-    const data = posts.map((post) => {
-      return new ContentsDto(
-        post.id,
-        post.createdAt,
-        post.images.map((img) => img.imageUrl),
-        tagMap.get(post.id) || [],
-        post.content,
-        post.timeTaken ?? '',
-        post.price ?? 0,
-        likeMap.get(post.id) || 0,
-      );
-    });
+    const data = posts.map((post) =>
+      this.postFeedMapper.toMemberContentsDto(post, {
+        tags: tagMap.get(post.id) || [],
+        likeCount: likeMap.get(post.id) || 0,
+      }),
+    );
 
     return { data, total, page, limit };
   }
@@ -278,21 +219,7 @@ export class PostService {
   async countDrawingsByMemberIds(
     memberIds: number[],
   ): Promise<Map<number, number>> {
-    if (memberIds.length === 0) return new Map();
-
-    const results = await this.postRepository
-      .createQueryBuilder('post')
-      .select('post.member_id', 'memberId')
-      .addSelect('COUNT(post.id)', 'count')
-      .where('post.member_id IN (:...memberIds)', { memberIds })
-      .groupBy('post.member_id')
-      .getRawMany<{ memberId: string; count: string }>();
-
-    const map = new Map<number, number>();
-    results.forEach((r) =>
-      map.set(parseInt(r.memberId, 10), parseInt(r.count, 10)),
-    );
-    return map;
+    return this.postFeedQueryRepository.countDrawingsByMemberIds(memberIds);
   }
 
   async findOne(id: number): Promise<Post> {
