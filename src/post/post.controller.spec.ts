@@ -91,9 +91,10 @@ describe('PostController', () => {
 
   it('remove는 id를 숫자로 변환해 전달한다', async () => {
     mockPostService.remove.mockResolvedValue(undefined);
+    const req = { user: { id: 3 } };
 
-    await controller.remove('9');
+    await controller.remove(req as any, '9');
 
-    expect(mockPostService.remove).toHaveBeenCalledWith(9);
+    expect(mockPostService.remove).toHaveBeenCalledWith(9, req.user);
   });
 });

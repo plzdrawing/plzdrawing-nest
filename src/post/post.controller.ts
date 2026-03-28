@@ -213,7 +213,9 @@ export class PostController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '게시글 삭제' })
   @ApiResponse({ status: 200, description: '게시글 삭제 성공' })
-  remove(@Param('id') id: string) {
-    return this.postService.remove(+id);
+  @ApiResponse({ status: 403, description: '삭제 권한 없음' })
+  @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
+  remove(@Request() req: AuthRequest, @Param('id') id: string) {
+    return this.postService.remove(+id, req.user);
   }
 }

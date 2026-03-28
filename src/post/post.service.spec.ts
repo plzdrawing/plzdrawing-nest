@@ -459,9 +459,27 @@ describe('PostService', () => {
       ).rejects.toThrow('이미지는 최대 3개까지 유지할 수 있습니다.');
     });
 
-    it('remove는 삭제를 위임한다', async () => {
-      await service.remove(7);
+    it('remove는 작성자 본인만 삭제할 수 있다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await service.remove(7, { id: 1 } as any);
       expect(postRepository.delete).toHaveBeenCalledWith(7);
+    });
+
+    it('remove는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await expect(service.remove(7, { id: 2 } as any)).rejects.toThrow(
+        '게시글 삭제 권한이 없습니다.',
+      );
+    });
+
+    it('remove는 게시글이 없으면 NotFoundException을 던진다', async () => {
+      postRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.remove(999, { id: 1 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

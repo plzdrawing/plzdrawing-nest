@@ -386,7 +386,18 @@ export class PostService {
     return this.findOne(id);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, member: Member): Promise<void> {
+    const post = await this.postRepository.findOne({
+      where: { id },
+      select: ['id', 'memberId'],
+    });
+    if (!post) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+    if (post.memberId !== member.id) {
+      throw new ForbiddenException('게시글 삭제 권한이 없습니다.');
+    }
+
     await this.postRepository.delete(id);
   }
 }
