@@ -10,6 +10,7 @@ describe('MemberController', () => {
     updateProfile: jest.fn(),
     getMyProfile: jest.fn(),
     getPublicProfile: jest.fn(),
+    getPublicReviews: jest.fn(),
     getPublicReviewSummary: jest.fn(),
     checkNickname: jest.fn(),
     withdraw: jest.fn(),
@@ -91,6 +92,29 @@ describe('MemberController', () => {
       reviewCount: 4,
     });
     expect(mockMemberService.getPublicReviewSummary).toHaveBeenCalledWith(33);
+  });
+
+  it('getPublicReviews는 memberId/pagination을 그대로 전달한다', async () => {
+    const pagination = { page: 2, limit: 5 };
+    mockMemberService.getPublicReviews.mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 2,
+      limit: 5,
+    });
+
+    await expect(
+      controller.getPublicReviews(22, pagination as any),
+    ).resolves.toEqual({
+      data: [],
+      total: 0,
+      page: 2,
+      limit: 5,
+    });
+    expect(mockMemberService.getPublicReviews).toHaveBeenCalledWith(
+      22,
+      pagination,
+    );
   });
 
   it('checkNickname은 쿼리값을 그대로 전달한다', async () => {

@@ -51,6 +51,7 @@ describe('MemberService', () => {
     };
     reviewRepository = {
       find: jest.fn(),
+      findAndCount: jest.fn(),
     };
     reviewKeywordMapRepository = {
       find: jest.fn(),
@@ -452,6 +453,74 @@ describe('MemberService', () => {
           topKeywords: [],
         }),
       );
+    });
+  });
+
+  describe('getPublicReviews', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.getPublicReviews(99, { page: 1, limit: 10 } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('후기 목록을 페이지네이션으로 반환한다', async () => {
+      const createdAt = new Date('2026-03-28T00:00:00.000Z');
+      memberRepository.findOne.mockResolvedValue({ id: 5 });
+      reviewRepository.findAndCount.mockResolvedValue([
+        [
+          {
+            id: 10,
+            star: ReviewStar.FIVE,
+            content: '만족해요',
+            imageObjectKeys: ['review/1.png'],
+            writerId: 4,
+            writer: {
+              nickname: '작성자',
+              profile: { profileUrl: 'https://writer.png' },
+            },
+            createdAt,
+            reviewKeywordMaps: [
+              { keyword: { keyword: '친절해요', isActive: true } },
+              { keyword: { keyword: '숨김', isActive: false } },
+              { keyword: { keyword: '원하는 대로 그려줘요', isActive: true } },
+            ],
+          },
+        ],
+        1,
+      ]);
+
+      const result = await service.getPublicReviews(5, {
+        page: 2,
+        limit: 3,
+      } as any);
+
+      expect(reviewRepository.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { receiverId: 5 },
+          skip: 3,
+          take: 3,
+        }),
+      );
+      expect(result).toEqual({
+        data: [
+          expect.objectContaining({
+            id: 10,
+            starScore: 5,
+            content: '만족해요',
+            keywords: ['친절해요', '원하는 대로 그려줘요'],
+            imageObjectKeys: ['review/1.png'],
+            writerId: 4,
+            writerNickname: '작성자',
+            writerProfileImageUrl: 'https://writer.png',
+            createdAt,
+          }),
+        ],
+        total: 1,
+        page: 2,
+        limit: 3,
+      });
     });
   });
 

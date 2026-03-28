@@ -29,7 +29,9 @@ import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
 import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
+import { PublicReviewListResponseDto } from './dto/public-review-list-response.dto';
 import { PublicReviewSummaryResponseDto } from './dto/public-review-summary-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Member')
 @Controller('member')
@@ -168,6 +170,21 @@ export class MemberController {
     @Param('memberId', ParseIntPipe) memberId: number,
   ): Promise<PublicProfileResponseDto> {
     return this.memberService.getPublicProfile(memberId);
+  }
+
+  @Get('v1/profile/:memberId/reviews')
+  @ApiOperation({ summary: '공개 프로필 후기 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '후기 목록 조회 성공',
+    type: PublicReviewListResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicReviews(
+    @Param('memberId', ParseIntPipe) memberId: number,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PublicReviewListResponseDto> {
+    return this.memberService.getPublicReviews(memberId, paginationDto);
   }
 
   @Get('v1/profile/:memberId/reviews/summary')

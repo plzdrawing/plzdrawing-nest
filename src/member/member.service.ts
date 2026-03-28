@@ -22,6 +22,7 @@ import { TagService } from '../tag/tag.service';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 import { Post } from '../entities/post.entity';
 import { Review } from '../entities/review.entity';
 import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
@@ -31,6 +32,10 @@ import {
   PublicReviewSummaryResponseDto,
   ReviewKeywordCountDto,
 } from './dto/public-review-summary-response.dto';
+import {
+  PublicReviewListItemDto,
+  PublicReviewListResponseDto,
+} from './dto/public-review-list-response.dto';
 
 @Injectable()
 export class MemberService {
@@ -283,6 +288,55 @@ export class MemberService {
       completedWorkCount,
       topKeywords,
     );
+  }
+
+  async getPublicReviews(
+    memberId: number,
+    paginationDto: PaginationDto,
+  ): Promise<PublicReviewListResponseDto> {
+    const member = await this.memberRepository.findOne({
+      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
+      select: ['id'],
+    });
+    if (!member) throw new NotFoundException('Member not found');
+
+    const { page = 1, limit = 10 } = paginationDto;
+    const [reviews, total] = await this.reviewRepository.findAndCount({
+      where: { receiverId: memberId },
+      relations: [
+        'writer',
+        'writer.profile',
+        'reviewKeywordMaps',
+        'reviewKeywordMaps.keyword',
+      ],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const data = reviews.map((review) => {
+      const keywords = review.reviewKeywordMaps
+        ? review.reviewKeywordMaps
+            .filter((map) => map.keyword && map.keyword.isActive)
+            .map((map) => map.keyword.keyword)
+        : [];
+
+      return new PublicReviewListItemDto(
+        review.id,
+        this.convertStarToNumber(review.star),
+        review.content ?? '',
+        keywords,
+        review.imageObjectKeys ?? [],
+        review.writerId,
+        review.writer ? review.writer.nickname : '',
+        review.writer && review.writer.profile
+          ? review.writer.profile.profileUrl
+          : null,
+        review.createdAt,
+      );
+    });
+
+    return { data, total, page, limit };
   }
 
   async withdraw(memberId: number): Promise<void> {
