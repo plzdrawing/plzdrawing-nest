@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -14,7 +15,10 @@ import {
 } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import {
+  FileFieldsInterceptor,
+  FilesInterceptor,
+} from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -30,8 +34,31 @@ import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
 
 import { Post as PostEntity } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 
 type AuthRequest = ExpressRequest & { user: Member };
+
+const MAX_POST_IMAGE_COUNT = 3;
+const MAX_POST_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
+
+const imageFileFilter = (
+  _req: ExpressRequest,
+  file: Express.Multer.File,
+  callback: (error: Error | null, acceptFile: boolean) => void,
+): void => {
+  if (/^image\/(jpeg|jpg|png|webp)$/.test(file.mimetype)) {
+    callback(null, true);
+    return;
+  }
+
+  callback(
+    new BadRequestException(
+      '이미지 파일(jpeg/jpg/png/webp)만 업로드할 수 있습니다.',
+    ),
+    false,
+  );
+};
 
 @ApiTags('Post')
 @Controller('posts')
@@ -42,15 +69,16 @@ export class PostController {
   @Post()
   @ApiBearerAuth('access-token')
   @UseInterceptors(
-    FilesInterceptor('images', 5, {
-      limits: { fileSize: 10 * 1024 * 1024 }, // 파일당 10MB 제한
+    FilesInterceptor('images', MAX_POST_IMAGE_COUNT, {
+      limits: { fileSize: MAX_POST_IMAGE_FILE_SIZE },
+      fileFilter: imageFileFilter,
     }),
   )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: '게시글 작성',
     description:
-      '게시글과 이미지를 함께 업로드합니다. images는 선택이며 최대 5개, 파일당 최대 10MB입니다.',
+      '게시글과 이미지를 함께 업로드합니다. images는 선택이며 최대 3개, 파일당 최대 10MB입니다.',
   })
   @ApiResponse({
     status: 201,
@@ -70,7 +98,7 @@ export class PostController {
       type: 'object',
       properties: {
         images: {
-          description: '업로드 이미지 목록(선택), 최대 5개, 파일당 최대 10MB',
+          description: '업로드 이미지 목록(선택), 최대 3개, 파일당 최대 10MB',
           type: 'array',
           items: {
             type: 'string',
@@ -88,7 +116,7 @@ export class PostController {
   })
   create(
     @Request() req: AuthRequest,
-    @Body() body: Partial<PostEntity>,
+    @Body() body: CreatePostDto,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
     return this.postService.create(req.user, body, files);
@@ -130,13 +158,54 @@ export class PostController {
   @UseGuards(AuthGuard('jwt'))
   @Patch(':id')
   @ApiBearerAuth('access-token')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [{ name: 'newImages', maxCount: MAX_POST_IMAGE_COUNT }],
+      {
+        limits: { fileSize: MAX_POST_IMAGE_FILE_SIZE },
+        fileFilter: imageFileFilter,
+      },
+    ),
+  )
+  @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: '게시글 수정' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        newImages: {
+          description: '추가할 이미지 목록(선택), 최대 3개, 파일당 최대 10MB',
+          type: 'array',
+          items: {
+            type: 'string',
+            format: 'binary',
+          },
+        },
+        deleteImageIds: {
+          description: '삭제할 이미지 ID 목록(선택)',
+          type: 'array',
+          items: { type: 'number' },
+        },
+        title: { type: 'string' },
+        content: { type: 'string' },
+        hashTag: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: '게시글 수정 성공' })
   @ApiResponse({ status: 400, description: '잘못된 요청' })
   @ApiResponse({ status: 403, description: '수정 권한 없음' })
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
-  update(@Param('id') id: string, @Body() body: Partial<PostEntity>) {
-    return this.postService.update(+id, body);
+  update(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: UpdatePostDto,
+    @UploadedFiles() files: { newImages?: Array<Express.Multer.File> },
+  ) {
+    return this.postService.update(+id, req.user, body, files?.newImages ?? []);
   }
 
   @UseGuards(AuthGuard('jwt'))

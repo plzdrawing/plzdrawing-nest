@@ -75,11 +75,18 @@ describe('PostController', () => {
 
   it('update는 id를 숫자로 변환해 전달한다', async () => {
     mockPostService.update.mockResolvedValue({ id: 8 });
+    const req = { user: { id: 1 } };
     const body = { content: 'updated' };
+    const files = { newImages: [{ originalname: 'c.png' }] };
 
-    await controller.update('8', body as any);
+    await controller.update(req as any, '8', body as any, files as any);
 
-    expect(mockPostService.update).toHaveBeenCalledWith(8, body);
+    expect(mockPostService.update).toHaveBeenCalledWith(
+      8,
+      req.user,
+      body,
+      files.newImages,
+    );
   });
 
   it('remove는 id를 숫자로 변환해 전달한다', async () => {

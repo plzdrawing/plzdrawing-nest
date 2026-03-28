@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Post } from '../entities/post.entity';
@@ -13,6 +18,10 @@ import { MemberService } from '../member/member.service';
 import { LatestContentsResponse } from './dto/latest-contents-response.dto';
 import { ContentsDto } from './dto/contents.dto';
 import { UploaderDto } from './dto/uploader.dto';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
+
+const MAX_POST_IMAGE_COUNT = 3;
 
 @Injectable()
 export class PostService {
@@ -31,19 +40,28 @@ export class PostService {
 
   async create(
     member: Member,
-    data: Partial<Post>,
+    data: CreatePostDto,
     files?: Array<Express.Multer.File>,
   ): Promise<Post> {
+    const { hashTag, ...postData } = data;
+
+    if (files && files.length > MAX_POST_IMAGE_COUNT) {
+      throw new BadRequestException(
+        `이미지는 최대 ${MAX_POST_IMAGE_COUNT}개까지 업로드할 수 있습니다.`,
+      );
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let savedPost: Post;
     try {
       const post = queryRunner.manager.create(Post, {
-        ...data,
+        ...postData,
         member,
       });
-      const savedPost = await queryRunner.manager.save(post);
+      savedPost = await queryRunner.manager.save(post);
 
       if (files && files.length > 0) {
         const imageUrls = await this.awsService.uploadFiles(files, 'posts');
@@ -63,6 +81,9 @@ export class PostService {
       }
 
       await queryRunner.commitTransaction();
+      if (hashTag !== undefined) {
+        await this.tagService.syncTags(savedPost, hashTag);
+      }
       return this.findOne(savedPost.id);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -253,8 +274,115 @@ export class PostService {
     return post;
   }
 
-  async update(id: number, data: Partial<Post>): Promise<Post> {
-    await this.postRepository.update(id, data);
+  async update(
+    id: number,
+    member: Member,
+    data: UpdatePostDto,
+    newFiles: Array<Express.Multer.File> = [],
+  ): Promise<Post> {
+    const post = await this.postRepository.findOne({
+      where: { id },
+      relations: ['images'],
+    });
+
+    if (!post) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+
+    if (post.memberId !== member.id) {
+      throw new ForbiddenException('게시글 수정 권한이 없습니다.');
+    }
+
+    const uniqueDeleteImageIds = [
+      ...new Set(data.deleteImageIds ? data.deleteImageIds : []),
+    ];
+    const imagesToDelete = post.images.filter((image) =>
+      uniqueDeleteImageIds.includes(image.id),
+    );
+
+    if (uniqueDeleteImageIds.length !== imagesToDelete.length) {
+      throw new BadRequestException(
+        '삭제할 이미지 ID가 현재 게시글에 존재하지 않습니다.',
+      );
+    }
+
+    const remainingImageCount = post.images.length - imagesToDelete.length;
+    if (remainingImageCount + newFiles.length > MAX_POST_IMAGE_COUNT) {
+      throw new BadRequestException(
+        `이미지는 최대 ${MAX_POST_IMAGE_COUNT}개까지 유지할 수 있습니다.`,
+      );
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const updatePayload: Partial<Post> = {};
+      if (data.title !== undefined) {
+        updatePayload.title = data.title;
+      }
+      if (data.content !== undefined) {
+        updatePayload.content = data.content;
+      }
+      if (data.category !== undefined) {
+        updatePayload.category = data.category;
+      }
+
+      if (Object.keys(updatePayload).length > 0) {
+        await queryRunner.manager.update(Post, id, updatePayload);
+      }
+
+      if (imagesToDelete.length > 0) {
+        await queryRunner.manager.delete(
+          PostImage,
+          imagesToDelete.map((image) => image.id),
+        );
+      }
+
+      if (newFiles.length > 0) {
+        const uploadedUrls = await this.awsService.uploadFiles(
+          newFiles,
+          'posts',
+        );
+        const newImages = uploadedUrls.map((imageUrl) =>
+          queryRunner.manager.create(PostImage, {
+            postId: id,
+            imageUrl,
+          }),
+        );
+        await queryRunner.manager.save(PostImage, newImages);
+      }
+
+      const latestImages = await queryRunner.manager.find(PostImage, {
+        where: { postId: id },
+        order: { id: 'ASC' },
+      });
+
+      await queryRunner.manager.update(Post, id, {
+        thumbnailUrl: latestImages[0] ? latestImages[0].imageUrl : null,
+      });
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    if (data.hashTag !== undefined) {
+      await this.tagService.syncTags(post, data.hashTag);
+    }
+
+    if (imagesToDelete.length > 0) {
+      await Promise.allSettled(
+        imagesToDelete.map((image) =>
+          this.awsService.deleteFile(image.imageUrl),
+        ),
+      );
+    }
+
     return this.findOne(id);
   }
 

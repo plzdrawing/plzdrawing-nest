@@ -46,9 +46,11 @@ describe('PostService', () => {
     postImageRepository = {};
     awsService = {
       uploadFiles: jest.fn(),
+      deleteFile: jest.fn(),
     };
     tagService = {
       findTagsByContentIds: jest.fn(),
+      syncTags: jest.fn(),
     };
     likeService = {
       countLikesByContentIds: jest.fn(),
@@ -69,6 +71,9 @@ describe('PostService', () => {
       manager: {
         create: jest.fn((_: any, data: any) => ({ ...data })),
         save: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        find: jest.fn(),
       },
     };
     dataSource = {
@@ -398,17 +403,63 @@ describe('PostService', () => {
       await expect(service.findOne(1)).resolves.toEqual({ id: 1 });
     });
 
-    it('update는 저장 후 상세를 반환하고 remove는 삭제를 위임한다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 7, content: 'updated' });
+    it('update는 작성자 본인 요청이면 수정 후 상세를 반환한다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
+      queryRunner.manager.find.mockResolvedValue([]);
+      jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ id: 7, content: 'updated' } as any);
 
-      await expect(service.update(7, { content: 'updated' })).resolves.toEqual({
+      await expect(
+        service.update(7, { id: 10 } as any, { content: 'updated' } as any),
+      ).resolves.toEqual({
         id: 7,
         content: 'updated',
       });
-      expect(postRepository.update).toHaveBeenCalledWith(7, {
+
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
         content: 'updated',
       });
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
+        thumbnailUrl: null,
+      });
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    });
 
+    it('update는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
+
+      await expect(
+        service.update(7, { id: 99 } as any, { content: 'updated' } as any),
+      ).rejects.toThrow('게시글 수정 권한이 없습니다.');
+    });
+
+    it('update는 최종 이미지 개수가 3개를 넘으면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      });
+
+      await expect(
+        service.update(
+          7,
+          { id: 10 } as any,
+          { content: 'updated' } as any,
+          [{ originalname: '1.png' }] as any,
+        ),
+      ).rejects.toThrow('이미지는 최대 3개까지 유지할 수 있습니다.');
+    });
+
+    it('remove는 삭제를 위임한다', async () => {
       await service.remove(7);
       expect(postRepository.delete).toHaveBeenCalledWith(7);
     });
