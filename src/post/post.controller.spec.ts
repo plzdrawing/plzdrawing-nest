@@ -10,8 +10,8 @@ describe('PostController', () => {
     getLatestContents: jest.fn(),
     getMemberContents: jest.fn(),
     findOne: jest.fn(),
-    update: jest.fn(),
-    remove: jest.fn(),
+    updateByOwner: jest.fn(),
+    removeByOwner: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -77,19 +77,25 @@ describe('PostController', () => {
   });
 
   it('update는 id를 숫자로 변환해 전달한다', async () => {
-    mockPostService.update.mockResolvedValue({ id: 8 });
+    mockPostService.updateByOwner.mockResolvedValue({ id: 8 });
+    const req = { user: { id: 10 } };
     const body = { content: 'updated' };
 
-    await controller.update('8', body as any);
+    await controller.update(req as any, '8', body as any);
 
-    expect(mockPostService.update).toHaveBeenCalledWith(8, body);
+    expect(mockPostService.updateByOwner).toHaveBeenCalledWith(
+      8,
+      req.user,
+      body,
+    );
   });
 
   it('remove는 id를 숫자로 변환해 전달한다', async () => {
-    mockPostService.remove.mockResolvedValue(undefined);
+    mockPostService.removeByOwner.mockResolvedValue(undefined);
+    const req = { user: { id: 10 } };
 
-    await controller.remove('9');
+    await controller.remove(req as any, '9');
 
-    expect(mockPostService.remove).toHaveBeenCalledWith(9);
+    expect(mockPostService.removeByOwner).toHaveBeenCalledWith(9, req.user);
   });
 });

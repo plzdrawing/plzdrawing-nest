@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -40,13 +41,17 @@ export class PostService {
     data: Partial<Post>,
     files?: Array<Express.Multer.File>,
   ): Promise<Post> {
+    const { hashTag, ...postData } = data as Partial<Post> & {
+      hashTag?: string[];
+    };
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const post = queryRunner.manager.create(Post, {
-        ...data,
+        ...postData,
         member,
       });
       const savedPost = await queryRunner.manager.save(post);
@@ -69,6 +74,14 @@ export class PostService {
       }
 
       await queryRunner.commitTransaction();
+
+      if (hashTag !== undefined) {
+        await this.tagService.syncTags(
+          savedPost,
+          this.normalizeHashTags(hashTag),
+        );
+      }
+
       return this.findOne(savedPost.id);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -301,11 +314,64 @@ export class PostService {
   }
 
   async update(id: number, data: Partial<Post>): Promise<Post> {
-    await this.postRepository.update(id, data);
+    const { hashTag, ...postData } = data as Partial<Post> & {
+      hashTag?: string[];
+    };
+
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+
+    await this.postRepository.update(id, postData);
+
+    if (hashTag !== undefined) {
+      await this.tagService.syncTags(existing, this.normalizeHashTags(hashTag));
+    }
+
     return this.findOne(id);
   }
 
   async remove(id: number): Promise<void> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+
     await this.postRepository.delete(id);
+  }
+
+  async updateByOwner(
+    id: number,
+    member: Member,
+    data: Partial<Post>,
+  ): Promise<Post> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+    if (existing.memberId !== member.id) {
+      throw new ForbiddenException('No permission to update this post');
+    }
+
+    return this.update(id, data);
+  }
+
+  async removeByOwner(id: number, member: Member): Promise<void> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+    if (existing.memberId !== member.id) {
+      throw new ForbiddenException('No permission to delete this post');
+    }
+
+    await this.postRepository.delete(id);
+  }
+
+  private normalizeHashTags(hashTag: string[]): string[] {
+    return hashTag
+      .map((tag) => tag?.trim())
+      .filter((tag): tag is string => Boolean(tag));
   }
 }

@@ -9,7 +9,11 @@ import { LikeService } from '../like/like.service';
 import { ReviewService } from '../review/review.service';
 import { MemberService } from '../member/member.service';
 import { DataSource } from 'typeorm';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 
 describe('PostService', () => {
   let service: PostService;
@@ -62,6 +66,7 @@ describe('PostService', () => {
     };
     tagService = {
       findTagsByContentIds: jest.fn(),
+      syncTags: jest.fn(),
     };
     likeService = {
       countLikesByContentIds: jest.fn(),
@@ -172,6 +177,22 @@ describe('PostService', () => {
 
       expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(queryRunner.release).toHaveBeenCalled();
+    });
+
+    it('hashTag가 있으면 생성 후 syncTags를 호출한다', async () => {
+      queryRunner.manager.save.mockResolvedValueOnce({ id: 301 });
+      jest.spyOn(service, 'findOne').mockResolvedValue({ id: 301 } as any);
+
+      await service.create(
+        { id: 1 } as any,
+        { content: 'hello', hashTag: ['고양이', ' 캐릭터 '] } as any,
+        [],
+      );
+
+      expect(tagService.syncTags).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 301 }),
+        ['고양이', '캐릭터'],
+      );
     });
   });
 
@@ -463,6 +484,39 @@ describe('PostService', () => {
 
       await service.remove(7);
       expect(postRepository.delete).toHaveBeenCalledWith(7);
+    });
+  });
+
+  describe('updateByOwner/removeByOwner', () => {
+    it('작성자가 아니면 updateByOwner는 ForbiddenException을 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
+
+      await expect(
+        service.updateByOwner(1, { id: 99 } as any, { content: 'x' } as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('작성자가 아니면 removeByOwner는 ForbiddenException을 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
+
+      await expect(service.removeByOwner(1, { id: 99 } as any)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('작성자면 updateByOwner/removeByOwner가 수행된다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 5, memberId: 20 });
+      const updateSpy = jest
+        .spyOn(service, 'update')
+        .mockResolvedValue({ id: 5 } as any);
+
+      await expect(
+        service.updateByOwner(5, { id: 20 } as any, { content: 'ok' } as any),
+      ).resolves.toEqual({ id: 5 });
+      expect(updateSpy).toHaveBeenCalledWith(5, { content: 'ok' });
+
+      await service.removeByOwner(5, { id: 20 } as any);
+      expect(postRepository.delete).toHaveBeenCalledWith(5);
     });
   });
 });

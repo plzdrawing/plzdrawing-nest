@@ -143,8 +143,12 @@ export class PostController {
   @ApiResponse({ status: 400, description: '잘못된 요청' })
   @ApiResponse({ status: 403, description: '수정 권한 없음' })
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
-  update(@Param('id') id: string, @Body() body: Partial<PostEntity>) {
-    return this.postService.update(+id, body);
+  update(
+    @Request() req: AuthRequest,
+    @Param('id') id: string,
+    @Body() body: Partial<PostEntity>,
+  ) {
+    return this.postService.updateByOwner(+id, req.user, body);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -152,7 +156,9 @@ export class PostController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '게시글 삭제' })
   @ApiResponse({ status: 200, description: '게시글 삭제 성공' })
-  remove(@Param('id') id: string) {
-    return this.postService.remove(+id);
+  @ApiResponse({ status: 403, description: '삭제 권한 없음' })
+  @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
+  remove(@Request() req: AuthRequest, @Param('id') id: string) {
+    return this.postService.removeByOwner(+id, req.user);
   }
 }
