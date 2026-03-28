@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
@@ -12,11 +12,30 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
+import { JwtOptionalAuthGuard } from '../auth/guards/jwt-optional-auth.guard';
+import { ReviewListQueryDto } from './dto/review-list-query.dto';
+import { ReviewPageResponseDto } from './dto/review-page-response.dto';
 
 @ApiTags('Review')
 @Controller('reviews')
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
+
+  @Get()
+  @UseGuards(JwtOptionalAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '후기 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '후기 목록 조회 성공',
+    type: ReviewPageResponseDto,
+  })
+  async getLatestReviews(
+    @GetUser() member: Member | null,
+    @Query() queryDto: ReviewListQueryDto,
+  ): Promise<ReviewPageResponseDto> {
+    return this.reviewService.getLatestReviews(queryDto, member?.id);
+  }
 
   @Post()
   @UseGuards(AuthGuard('jwt'))

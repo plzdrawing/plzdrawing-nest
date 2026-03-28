@@ -3,9 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Review } from '../entities/review.entity';
 import { ReviewKeyword } from '../entities/review-keyword.entity';
 import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
@@ -15,6 +16,9 @@ import { Member } from '../entities/member.entity';
 import { ChatRoomStatus, MessageType, ReviewStar } from '../common/enums';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
+import { ReviewListQueryDto } from './dto/review-list-query.dto';
+import { ReviewPageResponseDto } from './dto/review-page-response.dto';
+import { ReviewListItemDto } from './dto/review-list-item.dto';
 
 @Injectable()
 export class ReviewService {
@@ -143,6 +147,76 @@ export class ReviewService {
       receiverId: review.receiverId,
       createdAt: review.createdAt,
     };
+  }
+
+  async getLatestReviews(
+    queryDto: ReviewListQueryDto,
+    memberId?: number,
+  ): Promise<ReviewPageResponseDto> {
+    const { page = 1, limit = 10, q, scrappedOnly } = queryDto;
+
+    const qb = this.reviewRepository
+      .createQueryBuilder('review')
+      .leftJoinAndSelect('review.writer', 'writer')
+      .leftJoinAndSelect('review.post', 'post')
+      .leftJoinAndSelect('review.reviewKeywordMaps', 'reviewKeywordMap')
+      .leftJoinAndSelect('reviewKeywordMap.keyword', 'reviewKeyword');
+
+    const keyword = q?.trim();
+    if (keyword) {
+      qb.andWhere(
+        new Brackets((subQb) => {
+          subQb
+            .where('writer.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('review.content LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('reviewKeyword.keyword LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    if (scrappedOnly) {
+      if (!memberId) {
+        throw new UnauthorizedException(
+          'Authentication required for scrappedOnly filter',
+        );
+      }
+      qb.innerJoin('post.scraps', 'scrap', 'scrap.memberId = :memberId', {
+        memberId,
+      });
+    }
+
+    qb.orderBy('review.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .distinct(true);
+
+    const [reviews, total] = await qb.getManyAndCount();
+
+    const data: ReviewListItemDto[] = reviews.map((review) => {
+      const keywords = Array.from(
+        new Set(
+          (review.reviewKeywordMaps ?? [])
+            .map((map) => map.keyword?.keyword)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      );
+
+      return {
+        reviewId: review.id,
+        postId: review.postId,
+        writerId: review.writerId,
+        writerNickname: review.writer?.nickname ?? '',
+        star: review.star,
+        content: review.content ?? undefined,
+        keywords,
+        imageObjectKeys: review.imageObjectKeys ?? [],
+        createdAt: review.createdAt,
+      };
+    });
+
+    return { data, total, page, limit };
   }
 
   private convertStarToNumber(star: ReviewStar): number {
