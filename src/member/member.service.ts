@@ -82,13 +82,13 @@ export class MemberService {
         }
         profile.profileUrl = profileUrl;
       }
-      if (dto.introduce) {
+      if (dto.introduce !== undefined) {
         profile.introduction = dto.introduce;
       }
     }
     await this.profileRepository.save(profile);
 
-    if (dto.hashTag) {
+    if (dto.hashTag !== undefined) {
       await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
@@ -135,13 +135,13 @@ export class MemberService {
         }
         profile.profileUrl = profileUrl;
       }
-      if (dto.introduce) {
+      if (dto.introduce !== undefined) {
         profile.introduction = dto.introduce;
       }
     }
     await this.profileRepository.save(profile);
 
-    if (dto.hashTag) {
+    if (dto.hashTag !== undefined) {
       await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 

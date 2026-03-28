@@ -69,6 +69,7 @@ export class MemberController {
           type: 'string',
         },
         hashTag: {
+          description: '관심 태그 목록(선택), 최대 5개. 각 태그는 #으로 시작',
           type: 'array',
           items: {
             type: 'string',
@@ -121,6 +122,7 @@ export class MemberController {
           type: 'string',
         },
         hashTag: {
+          description: '관심 태그 목록(선택), 최대 5개. 각 태그는 #으로 시작',
           type: 'array',
           items: {
             type: 'string',

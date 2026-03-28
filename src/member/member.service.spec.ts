@@ -171,6 +171,30 @@ describe('MemberService', () => {
       expect(tagService.syncMemberTags).not.toHaveBeenCalled();
       expect(memberRepository.save).not.toHaveBeenCalledWith(member);
     });
+
+    it('빈 소개/빈 해시태그 배열도 갱신한다', async () => {
+      const member = { id: 1, role: MemberRole.ROLE_MEMBER };
+      const profile = {
+        memberId: 1,
+        profileUrl: 'https://old/url.png',
+        introduction: 'old',
+      };
+
+      memberRepository.findOne.mockResolvedValueOnce(member);
+      profileRepository.findOne.mockResolvedValue(profile);
+
+      await service.uploadProfile(
+        1,
+        null as any,
+        {
+          introduce: '',
+          hashTag: [],
+        } as any,
+      );
+
+      expect(profile.introduction).toBe('');
+      expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, []);
+    });
   });
 
   describe('updateProfile', () => {
@@ -209,6 +233,31 @@ describe('MemberService', () => {
       expect(profile.introduction).toBe('new intro');
       expect(profileRepository.save).toHaveBeenCalledWith(profile);
       expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, ['x']);
+    });
+
+    it('빈 소개/빈 해시태그 배열도 갱신한다', async () => {
+      const member = { id: 1, nickname: 'old' };
+      const profile = {
+        memberId: 1,
+        profileUrl: 'https://old/profile.png',
+        introduction: 'old intro',
+      };
+      memberRepository.findOne.mockResolvedValueOnce(member);
+      profileRepository.findOne.mockResolvedValue(profile);
+
+      await service.updateProfile(
+        1,
+        null as any,
+        {
+          nickname: 'newNick',
+          introduce: '',
+          hashTag: [],
+        } as any,
+      );
+
+      expect(member.nickname).toBe('newNick');
+      expect(profile.introduction).toBe('');
+      expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, []);
     });
   });
 
