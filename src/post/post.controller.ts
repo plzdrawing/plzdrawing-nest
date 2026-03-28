@@ -7,11 +7,11 @@ import {
   Param,
   Patch,
   Post,
-  UseGuards,
-  Request,
-  UseInterceptors,
-  UploadedFiles,
   Query,
+  Request,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { AuthGuard } from '@nestjs/passport';
@@ -20,12 +20,12 @@ import {
   FilesInterceptor,
 } from '@nestjs/platform-express';
 import {
-  ApiTags,
-  ApiOperation,
   ApiBearerAuth,
-  ApiConsumes,
   ApiBody,
+  ApiConsumes,
+  ApiOperation,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { PostService } from './post.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -34,7 +34,6 @@ import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { JwtOptionalAuthGuard } from '../auth/guards/jwt-optional-auth.guard';
 import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
-
 import { Post as PostEntity } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -216,9 +215,6 @@ export class PostController {
     @UploadedFiles() files: { newImages?: Array<Express.Multer.File> },
   ) {
     return this.postService.update(+id, req.user, body, files?.newImages ?? []);
-    @Body() body: Partial<PostEntity>,
-  ) {
-    return this.postService.updateByOwner(+id, req.user, body);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -230,6 +226,5 @@ export class PostController {
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.postService.remove(+id, req.user);
-    return this.postService.removeByOwner(+id, req.user);
   }
 }

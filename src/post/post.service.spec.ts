@@ -11,11 +11,7 @@ import { MemberService } from '../member/member.service';
 import { DataSource } from 'typeorm';
 import { PostFeedQueryRepository } from './query/post-feed.query.repository';
 import { PostFeedMapper } from './mapper/post-feed.mapper';
-import {
-  ForbiddenException,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 describe('PostService', () => {
   let service: PostService;
@@ -557,39 +553,6 @@ describe('PostService', () => {
       await expect(service.remove(999, { id: 1 } as any)).rejects.toThrow(
         NotFoundException,
       );
-    });
-  });
-
-  describe('updateByOwner/removeByOwner', () => {
-    it('작성자가 아니면 updateByOwner는 ForbiddenException을 던진다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
-
-      await expect(
-        service.updateByOwner(1, { id: 99 } as any, { content: 'x' } as any),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it('작성자가 아니면 removeByOwner는 ForbiddenException을 던진다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 1, memberId: 10 });
-
-      await expect(service.removeByOwner(1, { id: 99 } as any)).rejects.toThrow(
-        ForbiddenException,
-      );
-    });
-
-    it('작성자면 updateByOwner/removeByOwner가 수행된다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 5, memberId: 20 });
-      const updateSpy = jest
-        .spyOn(service, 'update')
-        .mockResolvedValue({ id: 5 } as any);
-
-      await expect(
-        service.updateByOwner(5, { id: 20 } as any, { content: 'ok' } as any),
-      ).resolves.toEqual({ id: 5 });
-      expect(updateSpy).toHaveBeenCalledWith(5, { content: 'ok' });
-
-      await service.removeByOwner(5, { id: 20 } as any);
-      expect(postRepository.delete).toHaveBeenCalledWith(5);
     });
   });
 });

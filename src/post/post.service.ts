@@ -3,13 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Post } from '../entities/post.entity';
 import { PostImage } from '../entities/post-image.entity';
 import { Member } from '../entities/member.entity';
@@ -21,14 +18,13 @@ import { ReviewService } from '../review/review.service';
 import { MemberService } from '../member/member.service';
 import { LatestContentsResponse } from './dto/latest-contents-response.dto';
 import { ContentsDto } from './dto/contents.dto';
-import { UploaderDto } from './dto/uploader.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-
-const MAX_POST_IMAGE_COUNT = 3;
 import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
 import { PostFeedQueryRepository } from './query/post-feed.query.repository';
 import { PostFeedMapper } from './mapper/post-feed.mapper';
+
+const MAX_POST_IMAGE_COUNT = 3;
 
 @Injectable()
 export class PostService {
@@ -59,9 +55,6 @@ export class PostService {
         `이미지는 최대 ${MAX_POST_IMAGE_COUNT}개까지 업로드할 수 있습니다.`,
       );
     }
-    const { hashTag, ...postData } = data as Partial<Post> & {
-      hashTag?: string[];
-    };
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -87,23 +80,17 @@ export class PostService {
 
         await queryRunner.manager.save(postImages);
 
-        // 첫 번째 이미지를 썸네일로 설정
         savedPost.thumbnailUrl = imageUrls[0];
         await queryRunner.manager.save(savedPost);
       }
 
       await queryRunner.commitTransaction();
       if (hashTag !== undefined) {
-        await this.tagService.syncTags(savedPost, hashTag);
-      }
-
-      if (hashTag !== undefined) {
         await this.tagService.syncTags(
           savedPost,
           this.normalizeHashTags(hashTag),
         );
       }
-
       return this.findOne(savedPost.id);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -358,7 +345,10 @@ export class PostService {
     }
 
     if (data.hashTag !== undefined) {
-      await this.tagService.syncTags(post, data.hashTag);
+      await this.tagService.syncTags(
+        post,
+        this.normalizeHashTags(data.hashTag),
+      );
     }
 
     if (imagesToDelete.length > 0) {
@@ -367,20 +357,6 @@ export class PostService {
           this.awsService.deleteFile(image.imageUrl),
         ),
       );
-  async update(id: number, data: Partial<Post>): Promise<Post> {
-    const { hashTag, ...postData } = data as Partial<Post> & {
-      hashTag?: string[];
-    };
-
-    const existing = await this.postRepository.findOne({ where: { id } });
-    if (!existing) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
-
-    await this.postRepository.update(id, postData);
-
-    if (hashTag !== undefined) {
-      await this.tagService.syncTags(existing, this.normalizeHashTags(hashTag));
     }
 
     return this.findOne(id);
@@ -397,46 +373,11 @@ export class PostService {
     if (post.memberId !== member.id) {
       throw new ForbiddenException('게시글 삭제 권한이 없습니다.');
     }
-  async remove(id: number): Promise<void> {
-    const existing = await this.postRepository.findOne({ where: { id } });
-    if (!existing) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
 
     await this.postRepository.delete(id);
   }
 
-  async updateByOwner(
-    id: number,
-    member: Member,
-    data: Partial<Post>,
-  ): Promise<Post> {
-    const existing = await this.postRepository.findOne({ where: { id } });
-    if (!existing) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
-    if (existing.memberId !== member.id) {
-      throw new ForbiddenException('No permission to update this post');
-    }
-
-    return this.update(id, data);
-  }
-
-  async removeByOwner(id: number, member: Member): Promise<void> {
-    const existing = await this.postRepository.findOne({ where: { id } });
-    if (!existing) {
-      throw new NotFoundException(`Post with ID ${id} not found`);
-    }
-    if (existing.memberId !== member.id) {
-      throw new ForbiddenException('No permission to delete this post');
-    }
-
-    await this.postRepository.delete(id);
-  }
-
-  private normalizeHashTags(hashTag: string[]): string[] {
-    return hashTag
-      .map((tag) => tag?.trim())
-      .filter((tag): tag is string => Boolean(tag));
+  private normalizeHashTags(tags: string[]): string[] {
+    return tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0);
   }
 }
