@@ -31,6 +31,9 @@ import { PostService } from './post.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { LatestContentsPageResponseDto } from './dto/latest-contents-page-response.dto';
 import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
+import { GetUser } from '../common/decorators/get-user.decorator';
+import { JwtOptionalAuthGuard } from '../auth/guards/jwt-optional-auth.guard';
+import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
 
 import { Post as PostEntity } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
@@ -107,6 +110,8 @@ export class PostController {
         },
         title: { type: 'string' },
         content: { type: 'string' },
+        timeTaken: { type: 'string', example: '10분' },
+        price: { type: 'number', example: 12000 },
         hashTag: {
           type: 'array',
           items: { type: 'string' },
@@ -123,14 +128,19 @@ export class PostController {
   }
 
   @Get()
+  @UseGuards(JwtOptionalAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '최신 게시글 조회' })
   @ApiResponse({
     status: 200,
     description: '최신 게시글 조회 성공',
     type: LatestContentsPageResponseDto,
   })
-  getLatestContents(@Query() paginationDto: PaginationDto) {
-    return this.postService.getLatestContents(paginationDto);
+  getLatestContents(
+    @GetUser() member: Member | null,
+    @Query() queryDto: LatestContentsQueryDto,
+  ) {
+    return this.postService.getLatestContents(queryDto, member?.id);
   }
 
   @Get('member/:memberId')
@@ -206,6 +216,9 @@ export class PostController {
     @UploadedFiles() files: { newImages?: Array<Express.Multer.File> },
   ) {
     return this.postService.update(+id, req.user, body, files?.newImages ?? []);
+    @Body() body: Partial<PostEntity>,
+  ) {
+    return this.postService.updateByOwner(+id, req.user, body);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -217,5 +230,6 @@ export class PostController {
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
   remove(@Request() req: AuthRequest, @Param('id') id: string) {
     return this.postService.remove(+id, req.user);
+    return this.postService.removeByOwner(+id, req.user);
   }
 }

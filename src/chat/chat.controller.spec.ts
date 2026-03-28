@@ -22,6 +22,7 @@ describe('ChatController', () => {
     getMessages: jest.Mock;
     sendMessage: jest.Mock;
     createImageUpload: jest.Mock;
+    createRequestImageUpload: jest.Mock;
     markAsRead: jest.Mock;
   };
 
@@ -35,6 +36,7 @@ describe('ChatController', () => {
       getMessages: jest.fn(),
       sendMessage: jest.fn(),
       createImageUpload: jest.fn(),
+      createRequestImageUpload: jest.fn(),
       markAsRead: jest.fn(),
     };
 
@@ -168,6 +170,29 @@ describe('ChatController', () => {
     const result = await controller.sendImageMessage(member, '9', dto);
 
     expect(chatService.createImageUpload).toHaveBeenCalledWith(member, 9, dto);
+    expect(result).toEqual(expected);
+  });
+
+  it('요청 참고 이미지 업로드 URL 발급 요청을 서비스로 위임해야 한다', async () => {
+    const member = { id: 1 } as Member;
+    const dto: ChatImageUploadRequestDto = {
+      fileName: 'reference.png',
+      contentType: 'image/png',
+      size: 1024,
+    };
+    const expected = {
+      uploadUrl: 'https://upload.example.com',
+      objectKey: 'chat/request/1/2026/02/sample.png',
+      expiresAt: new Date().toISOString(),
+    };
+    chatService.createRequestImageUpload.mockResolvedValue(expected);
+
+    const result = await controller.createRequestImageUpload(member, dto);
+
+    expect(chatService.createRequestImageUpload).toHaveBeenCalledWith(
+      member,
+      dto,
+    );
     expect(result).toEqual(expected);
   });
 

@@ -3,6 +3,10 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -22,6 +26,9 @@ import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 
 const MAX_POST_IMAGE_COUNT = 3;
+import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
+import { PostFeedQueryRepository } from './query/post-feed.query.repository';
+import { PostFeedMapper } from './mapper/post-feed.mapper';
 
 @Injectable()
 export class PostService {
@@ -36,6 +43,8 @@ export class PostService {
     private readonly reviewService: ReviewService,
     private readonly memberService: MemberService,
     private readonly dataSource: DataSource,
+    private readonly postFeedQueryRepository: PostFeedQueryRepository,
+    private readonly postFeedMapper: PostFeedMapper,
   ) {}
 
   async create(
@@ -50,6 +59,9 @@ export class PostService {
         `이미지는 최대 ${MAX_POST_IMAGE_COUNT}개까지 업로드할 수 있습니다.`,
       );
     }
+    const { hashTag, ...postData } = data as Partial<Post> & {
+      hashTag?: string[];
+    };
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -84,6 +96,14 @@ export class PostService {
       if (hashTag !== undefined) {
         await this.tagService.syncTags(savedPost, hashTag);
       }
+
+      if (hashTag !== undefined) {
+        await this.tagService.syncTags(
+          savedPost,
+          this.normalizeHashTags(hashTag),
+        );
+      }
+
       return this.findOne(savedPost.id);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -133,19 +153,23 @@ export class PostService {
     };
   }
 
-  async getLatestContents(paginationDto: PaginationDto): Promise<{
+  async getLatestContents(
+    queryDto: LatestContentsQueryDto,
+    memberId?: number,
+  ): Promise<{
     data: LatestContentsResponse[];
     total: number;
     page: number;
     limit: number;
   }> {
-    const { page = 1, limit = 10 } = paginationDto;
-    const [posts, total] = await this.postRepository.findAndCount({
-      relations: ['member', 'images'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    if (queryDto.scrappedOnly && !memberId) {
+      throw new UnauthorizedException(
+        'Authentication required for scrappedOnly filter',
+      );
+    }
+
+    const { posts, total, page, limit } =
+      await this.postFeedQueryRepository.findLatestPosts(queryDto, memberId);
 
     if (posts.length === 0) {
       return { data: [], total, page, limit };
@@ -164,31 +188,13 @@ export class PostService {
 
     const data = posts.map((post) => {
       const uploaderId = post.memberId;
-      const stats = reviewStatsMap.get(uploaderId) || {
-        reviewCount: 0,
-        star: 0,
-      };
-
-      const uploaderDto = new UploaderDto(
-        post.member.nickname,
-        profileMap.get(uploaderId),
-        drawingCountMap.get(uploaderId) || 0,
-        stats.reviewCount,
-        stats.star,
-      );
-
-      const contentsDto = new ContentsDto(
-        post.id,
-        post.createdAt,
-        post.images.map((img) => img.imageUrl),
-        tagMap.get(post.id) || [],
-        post.content,
-        post.category ? post.category.toString() : '',
-        0, // price
-        likeMap.get(post.id) || 0,
-      );
-
-      return new LatestContentsResponse(uploaderDto, contentsDto);
+      return this.postFeedMapper.toLatestContentsResponse(post, {
+        tags: tagMap.get(post.id) || [],
+        likeCount: likeMap.get(post.id) || 0,
+        profileImageUrl: profileMap.get(uploaderId),
+        drawingCount: drawingCountMap.get(uploaderId) || 0,
+        reviewStat: reviewStatsMap.get(uploaderId),
+      });
     });
 
     return { data, total, page, limit };
@@ -220,18 +226,12 @@ export class PostService {
     const tagMap = await this.tagService.findTagsByContentIds(contentIds);
     const likeMap = await this.likeService.countLikesByContentIds(contentIds);
 
-    const data = posts.map((post) => {
-      return new ContentsDto(
-        post.id,
-        post.createdAt,
-        post.images.map((img) => img.imageUrl),
-        tagMap.get(post.id) || [],
-        post.content,
-        '', // timeTaken
-        0, // price
-        likeMap.get(post.id) || 0,
-      );
-    });
+    const data = posts.map((post) =>
+      this.postFeedMapper.toMemberContentsDto(post, {
+        tags: tagMap.get(post.id) || [],
+        likeCount: likeMap.get(post.id) || 0,
+      }),
+    );
 
     return { data, total, page, limit };
   }
@@ -239,21 +239,7 @@ export class PostService {
   async countDrawingsByMemberIds(
     memberIds: number[],
   ): Promise<Map<number, number>> {
-    if (memberIds.length === 0) return new Map();
-
-    const results = await this.postRepository
-      .createQueryBuilder('post')
-      .select('post.member_id', 'memberId')
-      .addSelect('COUNT(post.id)', 'count')
-      .where('post.member_id IN (:...memberIds)', { memberIds })
-      .groupBy('post.member_id')
-      .getRawMany<{ memberId: string; count: string }>();
-
-    const map = new Map<number, number>();
-    results.forEach((r) =>
-      map.set(parseInt(r.memberId, 10), parseInt(r.count, 10)),
-    );
-    return map;
+    return this.postFeedQueryRepository.countDrawingsByMemberIds(memberIds);
   }
 
   async findOne(id: number): Promise<Post> {
@@ -381,6 +367,20 @@ export class PostService {
           this.awsService.deleteFile(image.imageUrl),
         ),
       );
+  async update(id: number, data: Partial<Post>): Promise<Post> {
+    const { hashTag, ...postData } = data as Partial<Post> & {
+      hashTag?: string[];
+    };
+
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+
+    await this.postRepository.update(id, postData);
+
+    if (hashTag !== undefined) {
+      await this.tagService.syncTags(existing, this.normalizeHashTags(hashTag));
     }
 
     return this.findOne(id);
@@ -397,7 +397,46 @@ export class PostService {
     if (post.memberId !== member.id) {
       throw new ForbiddenException('게시글 삭제 권한이 없습니다.');
     }
+  async remove(id: number): Promise<void> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
 
     await this.postRepository.delete(id);
+  }
+
+  async updateByOwner(
+    id: number,
+    member: Member,
+    data: Partial<Post>,
+  ): Promise<Post> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+    if (existing.memberId !== member.id) {
+      throw new ForbiddenException('No permission to update this post');
+    }
+
+    return this.update(id, data);
+  }
+
+  async removeByOwner(id: number, member: Member): Promise<void> {
+    const existing = await this.postRepository.findOne({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Post with ID ${id} not found`);
+    }
+    if (existing.memberId !== member.id) {
+      throw new ForbiddenException('No permission to delete this post');
+    }
+
+    await this.postRepository.delete(id);
+  }
+
+  private normalizeHashTags(hashTag: string[]): string[] {
+    return hashTag
+      .map((tag) => tag?.trim())
+      .filter((tag): tag is string => Boolean(tag));
   }
 }

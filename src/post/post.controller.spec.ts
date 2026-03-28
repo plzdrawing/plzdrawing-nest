@@ -10,8 +10,8 @@ describe('PostController', () => {
     getLatestContents: jest.fn(),
     getMemberContents: jest.fn(),
     findOne: jest.fn(),
-    update: jest.fn(),
-    remove: jest.fn(),
+    updateByOwner: jest.fn(),
+    removeByOwner: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -47,13 +47,16 @@ describe('PostController', () => {
   });
 
   it('getLatestContents는 paginationDto를 그대로 전달한다', async () => {
-    const dto = { page: 1, limit: 10 };
+    const member = { id: 33 };
+    const dto = { page: 1, limit: 10, q: '곰', scrappedOnly: false };
     mockPostService.getLatestContents.mockResolvedValue({ data: [] });
 
-    await expect(controller.getLatestContents(dto as any)).resolves.toEqual({
+    await expect(
+      controller.getLatestContents(member as any, dto as any),
+    ).resolves.toEqual({
       data: [],
     });
-    expect(mockPostService.getLatestContents).toHaveBeenCalledWith(dto);
+    expect(mockPostService.getLatestContents).toHaveBeenCalledWith(dto, 33);
   });
 
   it('getMemberContents는 memberId를 숫자로 변환해 전달한다', async () => {
@@ -76,6 +79,8 @@ describe('PostController', () => {
   it('update는 id를 숫자로 변환해 전달한다', async () => {
     mockPostService.update.mockResolvedValue({ id: 8 });
     const req = { user: { id: 1 } };
+    mockPostService.updateByOwner.mockResolvedValue({ id: 8 });
+    const req = { user: { id: 10 } };
     const body = { content: 'updated' };
     const files = { newImages: [{ originalname: 'c.png' }] };
 
@@ -86,6 +91,12 @@ describe('PostController', () => {
       req.user,
       body,
       files.newImages,
+    await controller.update(req as any, '8', body as any);
+
+    expect(mockPostService.updateByOwner).toHaveBeenCalledWith(
+      8,
+      req.user,
+      body,
     );
   });
 
@@ -96,5 +107,11 @@ describe('PostController', () => {
     await controller.remove(req as any, '9');
 
     expect(mockPostService.remove).toHaveBeenCalledWith(9, req.user);
+    mockPostService.removeByOwner.mockResolvedValue(undefined);
+    const req = { user: { id: 10 } };
+
+    await controller.remove(req as any, '9');
+
+    expect(mockPostService.removeByOwner).toHaveBeenCalledWith(9, req.user);
   });
 });
