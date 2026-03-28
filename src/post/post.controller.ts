@@ -27,6 +27,9 @@ import { PostService } from './post.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { LatestContentsPageResponseDto } from './dto/latest-contents-page-response.dto';
 import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
+import { GetUser } from '../common/decorators/get-user.decorator';
+import { JwtOptionalAuthGuard } from '../auth/guards/jwt-optional-auth.guard';
+import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
 
 import { Post as PostEntity } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
@@ -95,14 +98,19 @@ export class PostController {
   }
 
   @Get()
+  @UseGuards(JwtOptionalAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: '최신 게시글 조회' })
   @ApiResponse({
     status: 200,
     description: '최신 게시글 조회 성공',
     type: LatestContentsPageResponseDto,
   })
-  getLatestContents(@Query() paginationDto: PaginationDto) {
-    return this.postService.getLatestContents(paginationDto);
+  getLatestContents(
+    @GetUser() member: Member | null,
+    @Query() queryDto: LatestContentsQueryDto,
+  ) {
+    return this.postService.getLatestContents(queryDto, member?.id);
   }
 
   @Get('member/:memberId')

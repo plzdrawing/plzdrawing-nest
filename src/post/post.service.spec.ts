@@ -9,7 +9,7 @@ import { LikeService } from '../like/like.service';
 import { ReviewService } from '../review/review.service';
 import { MemberService } from '../member/member.service';
 import { DataSource } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 describe('PostService', () => {
   let service: PostService;
@@ -23,10 +23,23 @@ describe('PostService', () => {
   let memberService: any;
   let dataSource: any;
   let queryRunner: any;
+  let latestQb: any;
   let countQb: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
+
+    latestQb = {
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      distinct: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
 
     countQb = {
       select: jest.fn().mockReturnThis(),
@@ -41,7 +54,7 @@ describe('PostService', () => {
       findOne: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-      createQueryBuilder: jest.fn().mockReturnValue(countQb),
+      createQueryBuilder: jest.fn().mockReturnValue(latestQb),
     };
     postImageRepository = {};
     awsService = {
@@ -195,7 +208,7 @@ describe('PostService', () => {
 
   describe('getLatestContents', () => {
     it('게시글이 없으면 빈 결과를 반환한다', async () => {
-      postRepository.findAndCount.mockResolvedValue([[], 0]);
+      latestQb.getManyAndCount.mockResolvedValue([[], 0]);
 
       await expect(
         service.getLatestContents({ page: 1, limit: 10 } as any),
@@ -209,7 +222,7 @@ describe('PostService', () => {
 
     it('집계 맵을 이용해 LatestContentsResponse 목록으로 매핑한다', async () => {
       const now = new Date('2024-01-01T00:00:00Z');
-      postRepository.findAndCount.mockResolvedValue([
+      latestQb.getManyAndCount.mockResolvedValue([
         [
           {
             id: 1,
@@ -301,6 +314,44 @@ describe('PostService', () => {
         }),
       );
     });
+
+    it('scrappedOnly=true인데 memberId가 없으면 UnauthorizedException을 던진다', async () => {
+      await expect(
+        service.getLatestContents({
+          page: 1,
+          limit: 10,
+          scrappedOnly: true,
+        } as any),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(latestQb.innerJoin).not.toHaveBeenCalled();
+    });
+
+    it('scrappedOnly=true면 scrap inner join을 적용한다', async () => {
+      latestQb.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.getLatestContents(
+        { page: 1, limit: 10, scrappedOnly: true } as any,
+        123,
+      );
+
+      expect(latestQb.innerJoin).toHaveBeenCalledWith(
+        'post.scraps',
+        'scrap',
+        'scrap.memberId = :memberId',
+        { memberId: 123 },
+      );
+    });
+
+    it('q가 있으면 검색 조건을 추가한다', async () => {
+      latestQb.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.getLatestContents(
+        { page: 1, limit: 10, q: '  고양이  ' } as any,
+        1,
+      );
+
+      expect(latestQb.andWhere).toHaveBeenCalled();
+    });
   });
 
   describe('getMemberContents', () => {
@@ -368,6 +419,7 @@ describe('PostService', () => {
     });
 
     it('쿼리 결과를 숫자 Map으로 변환한다', async () => {
+      postRepository.createQueryBuilder.mockReturnValue(countQb);
       countQb.getRawMany.mockResolvedValue([
         { memberId: '100', count: '4' },
         { memberId: '200', count: '8' },

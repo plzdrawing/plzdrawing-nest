@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Brackets } from 'typeorm';
 import { Post } from '../entities/post.entity';
 import { PostImage } from '../entities/post-image.entity';
 import { Member } from '../entities/member.entity';
@@ -13,6 +17,8 @@ import { MemberService } from '../member/member.service';
 import { LatestContentsResponse } from './dto/latest-contents-response.dto';
 import { ContentsDto } from './dto/contents.dto';
 import { UploaderDto } from './dto/uploader.dto';
+import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
+import { TagStatus } from '../common/enums';
 
 @Injectable()
 export class PostService {
@@ -112,19 +118,60 @@ export class PostService {
     };
   }
 
-  async getLatestContents(paginationDto: PaginationDto): Promise<{
+  async getLatestContents(
+    queryDto: LatestContentsQueryDto,
+    memberId?: number,
+  ): Promise<{
     data: LatestContentsResponse[];
     total: number;
     page: number;
     limit: number;
   }> {
-    const { page = 1, limit = 10 } = paginationDto;
-    const [posts, total] = await this.postRepository.findAndCount({
-      relations: ['member', 'images'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
+    const { page = 1, limit = 10, q, scrappedOnly } = queryDto;
+
+    const qb = this.postRepository
+      .createQueryBuilder('post')
+      .leftJoinAndSelect('post.member', 'member')
+      .leftJoinAndSelect('post.images', 'images')
+      .leftJoin(
+        'post.postTags',
+        'postTag',
+        'postTag.status = :activeTagStatus',
+        {
+          activeTagStatus: TagStatus.ACTIVE,
+        },
+      )
+      .leftJoin('postTag.tag', 'tag');
+
+    const keyword = q?.trim();
+    if (keyword) {
+      qb.andWhere(
+        new Brackets((subQb) => {
+          subQb
+            .where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('post.content LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('tag.name LIKE :keyword', { keyword: `%${keyword}%` });
+        }),
+      );
+    }
+
+    if (scrappedOnly) {
+      if (!memberId) {
+        throw new UnauthorizedException(
+          'Authentication required for scrappedOnly filter',
+        );
+      }
+      qb.innerJoin('post.scraps', 'scrap', 'scrap.memberId = :memberId', {
+        memberId,
+      });
+    }
+
+    qb.orderBy('post.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .distinct(true);
+
+    const [posts, total] = await qb.getManyAndCount();
 
     if (posts.length === 0) {
       return { data: [], total, page, limit };

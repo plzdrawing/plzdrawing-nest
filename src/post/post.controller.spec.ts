@@ -47,13 +47,16 @@ describe('PostController', () => {
   });
 
   it('getLatestContents는 paginationDto를 그대로 전달한다', async () => {
-    const dto = { page: 1, limit: 10 };
+    const member = { id: 33 };
+    const dto = { page: 1, limit: 10, q: '곰', scrappedOnly: false };
     mockPostService.getLatestContents.mockResolvedValue({ data: [] });
 
-    await expect(controller.getLatestContents(dto as any)).resolves.toEqual({
+    await expect(
+      controller.getLatestContents(member as any, dto as any),
+    ).resolves.toEqual({
       data: [],
     });
-    expect(mockPostService.getLatestContents).toHaveBeenCalledWith(dto);
+    expect(mockPostService.getLatestContents).toHaveBeenCalledWith(dto, 33);
   });
 
   it('getMemberContents는 memberId를 숫자로 변환해 전달한다', async () => {
