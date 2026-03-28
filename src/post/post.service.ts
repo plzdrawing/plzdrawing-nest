@@ -222,8 +222,8 @@ export class PostService {
         post.images.map((img) => img.imageUrl),
         tagMap.get(post.id) || [],
         post.content,
-        post.category ? post.category.toString() : '',
-        0, // price
+        post.timeTaken ?? '',
+        post.price ?? 0,
         likeMap.get(post.id) || 0,
       );
 
@@ -266,8 +266,8 @@ export class PostService {
         post.images.map((img) => img.imageUrl),
         tagMap.get(post.id) || [],
         post.content,
-        '', // timeTaken
-        0, // price
+        post.timeTaken ?? '',
+        post.price ?? 0,
         likeMap.get(post.id) || 0,
       );
     });

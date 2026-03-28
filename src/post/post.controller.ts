@@ -82,6 +82,8 @@ export class PostController {
         },
         title: { type: 'string' },
         content: { type: 'string' },
+        timeTaken: { type: 'string', example: '10분' },
+        price: { type: 'number', example: 12000 },
         hashTag: {
           type: 'array',
           items: { type: 'string' },
