@@ -3,9 +3,18 @@ import { MemberService } from './member.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
+import { Post } from '../entities/post.entity';
+import { Review } from '../entities/review.entity';
+import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
+import { ChatRoom } from '../entities/chat-room.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
-import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
+import {
+  MemberRole,
+  MemberStatus,
+  ReviewStar,
+  TagStatus,
+} from '../common/enums';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
@@ -14,6 +23,10 @@ describe('MemberService', () => {
 
   let memberRepository: any;
   let profileRepository: any;
+  let postRepository: any;
+  let reviewRepository: any;
+  let reviewKeywordMapRepository: any;
+  let chatRoomRepository: any;
   let awsService: any;
   let tagService: any;
 
@@ -33,6 +46,18 @@ describe('MemberService', () => {
       save: jest.fn(),
       findOne: jest.fn(),
     };
+    postRepository = {
+      count: jest.fn(),
+    };
+    reviewRepository = {
+      find: jest.fn(),
+    };
+    reviewKeywordMapRepository = {
+      find: jest.fn(),
+    };
+    chatRoomRepository = {
+      count: jest.fn(),
+    };
     awsService = {
       uploadFile: jest.fn(),
       deleteFile: jest.fn(),
@@ -51,6 +76,22 @@ describe('MemberService', () => {
         {
           provide: getRepositoryToken(Profile),
           useValue: profileRepository,
+        },
+        {
+          provide: getRepositoryToken(Post),
+          useValue: postRepository,
+        },
+        {
+          provide: getRepositoryToken(Review),
+          useValue: reviewRepository,
+        },
+        {
+          provide: getRepositoryToken(ReviewKeywordMap),
+          useValue: reviewKeywordMapRepository,
+        },
+        {
+          provide: getRepositoryToken(ChatRoom),
+          useValue: chatRoomRepository,
         },
         {
           provide: AwsService,
@@ -289,6 +330,126 @@ describe('MemberService', () => {
           profileImageUrl: 'https://img',
           introduce: 'hi',
           hashTags: ['cat', 'bird'],
+        }),
+      );
+    });
+  });
+
+  describe('getPublicProfile', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getPublicProfile(2)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('공개 프로필 응답을 구성한다', async () => {
+      memberRepository.findOne.mockResolvedValue({
+        id: 2,
+        nickname: 'artist',
+        profile: {
+          profileUrl: 'https://profile.png',
+          introduction: 'hello',
+        },
+        memberTags: [
+          { status: TagStatus.ACTIVE, tag: { name: '#귀여운' } },
+          { status: TagStatus.INACTIVE, tag: { name: '#숨김' } },
+          { status: TagStatus.ACTIVE, tag: { name: '#누사' } },
+        ],
+      });
+      postRepository.count.mockResolvedValue(7);
+
+      const result = await service.getPublicProfile(2);
+
+      expect(postRepository.count).toHaveBeenCalledWith({
+        where: { memberId: 2 },
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          memberId: 2,
+          nickname: 'artist',
+          profileImageUrl: 'https://profile.png',
+          introduce: 'hello',
+          hashTags: ['#귀여운', '#누사'],
+          drawingCount: 7,
+        }),
+      );
+    });
+  });
+
+  describe('getPublicReviewSummary', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.getPublicReviewSummary(10)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('후기/키워드/완료작업 집계를 반환한다', async () => {
+      memberRepository.findOne.mockResolvedValue({ id: 10 });
+      reviewRepository.find.mockResolvedValue([
+        { id: 1, star: ReviewStar.FIVE },
+        { id: 2, star: ReviewStar.FOUR },
+        { id: 3, star: ReviewStar.ONE },
+      ]);
+      chatRoomRepository.count.mockResolvedValue(9);
+      reviewKeywordMapRepository.find.mockResolvedValue([
+        { keyword: { keyword: '친절해요', isActive: true } },
+        { keyword: { keyword: '친절해요', isActive: true } },
+        { keyword: { keyword: '귀여워요', isActive: true } },
+        { keyword: { keyword: '섬세해요', isActive: true } },
+        { keyword: { keyword: '빠르게 작업해요', isActive: true } },
+        { keyword: { keyword: '원하는 대로 그려줘요', isActive: true } },
+        { keyword: { keyword: '숨김키워드', isActive: false } },
+      ]);
+
+      const result = await service.getPublicReviewSummary(10);
+
+      expect(reviewRepository.find).toHaveBeenCalledWith({
+        where: { receiverId: 10 },
+        select: ['id', 'star'],
+      });
+      expect(chatRoomRepository.count).toHaveBeenCalledWith({
+        where: {
+          artistId: 10,
+          status: expect.any(Object),
+        },
+      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          averageStar: 3.33,
+          reviewCount: 3,
+          completedWorkCount: 9,
+          topKeywords: [
+            expect.objectContaining({ keyword: '친절해요', count: 2 }),
+            expect.objectContaining({ keyword: '귀여워요', count: 1 }),
+            expect.objectContaining({ keyword: '빠르게 작업해요', count: 1 }),
+            expect.objectContaining({ keyword: '섬세해요', count: 1 }),
+            expect.objectContaining({
+              keyword: '원하는 대로 그려줘요',
+              count: 1,
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('후기가 없으면 0 집계를 반환한다', async () => {
+      memberRepository.findOne.mockResolvedValue({ id: 11 });
+      reviewRepository.find.mockResolvedValue([]);
+      chatRoomRepository.count.mockResolvedValue(0);
+
+      const result = await service.getPublicReviewSummary(11);
+
+      expect(reviewKeywordMapRepository.find).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          averageStar: 0,
+          reviewCount: 0,
+          completedWorkCount: 0,
+          topKeywords: [],
         }),
       );
     });

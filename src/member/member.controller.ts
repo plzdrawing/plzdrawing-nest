@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Patch,
+  ParseIntPipe,
   Post,
   Query,
   UploadedFile,
@@ -26,6 +28,8 @@ import { Member } from '../entities/member.entity';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
+import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
+import { PublicReviewSummaryResponseDto } from './dto/public-review-summary-response.dto';
 
 @ApiTags('Member')
 @Controller('member')
@@ -150,6 +154,34 @@ export class MemberController {
   })
   async getMyProfile(@GetUser() member: Member): Promise<ProfileInfoResponse> {
     return this.memberService.getMyProfile(member.id);
+  }
+
+  @Get('v1/profile/:memberId')
+  @ApiOperation({ summary: '공개 프로필 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '공개 프로필 조회 성공',
+    type: PublicProfileResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicProfile(
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ): Promise<PublicProfileResponseDto> {
+    return this.memberService.getPublicProfile(memberId);
+  }
+
+  @Get('v1/profile/:memberId/reviews/summary')
+  @ApiOperation({ summary: '공개 프로필 후기 요약 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '후기 요약 조회 성공',
+    type: PublicReviewSummaryResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicReviewSummary(
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ): Promise<PublicReviewSummaryResponseDto> {
+    return this.memberService.getPublicReviewSummary(memberId);
   }
 
   @Get('check-nickname')

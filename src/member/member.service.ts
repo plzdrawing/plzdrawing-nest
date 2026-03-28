@@ -10,12 +10,27 @@ import { Repository, In, LessThan } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
-import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
+import {
+  ChatRoomStatus,
+  MemberRole,
+  MemberStatus,
+  ReviewStar,
+  TagStatus,
+} from '../common/enums';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
+import { Post } from '../entities/post.entity';
+import { Review } from '../entities/review.entity';
+import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
+import { ChatRoom } from '../entities/chat-room.entity';
+import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
+import {
+  PublicReviewSummaryResponseDto,
+  ReviewKeywordCountDto,
+} from './dto/public-review-summary-response.dto';
 
 @Injectable()
 export class MemberService {
@@ -26,6 +41,14 @@ export class MemberService {
     private readonly memberRepository: Repository<Member>,
     @InjectRepository(Profile)
     private readonly profileRepository: Repository<Profile>,
+    @InjectRepository(Post)
+    private readonly postRepository: Repository<Post>,
+    @InjectRepository(Review)
+    private readonly reviewRepository: Repository<Review>,
+    @InjectRepository(ReviewKeywordMap)
+    private readonly reviewKeywordMapRepository: Repository<ReviewKeywordMap>,
+    @InjectRepository(ChatRoom)
+    private readonly chatRoomRepository: Repository<ChatRoom>,
     private readonly awsService: AwsService,
     private readonly tagService: TagService,
   ) {}
@@ -168,6 +191,100 @@ export class MemberService {
     );
   }
 
+  async getPublicProfile(memberId: number): Promise<PublicProfileResponseDto> {
+    const member = await this.memberRepository.findOne({
+      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
+      relations: ['profile', 'memberTags', 'memberTags.tag'],
+    });
+    if (!member) throw new NotFoundException('Member not found');
+
+    const activeTags = member.memberTags
+      .filter((mt) => mt.status === TagStatus.ACTIVE)
+      .map((mt) => mt.tag.name);
+    const drawingCount = await this.postRepository.count({
+      where: { memberId: member.id },
+    });
+
+    return new PublicProfileResponseDto(
+      member.id,
+      member.nickname,
+      member.profile ? member.profile.profileUrl : null,
+      member.profile ? member.profile.introduction : null,
+      activeTags,
+      drawingCount,
+    );
+  }
+
+  async getPublicReviewSummary(
+    memberId: number,
+  ): Promise<PublicReviewSummaryResponseDto> {
+    const member = await this.memberRepository.findOne({
+      where: { id: memberId, isDeleted: false, status: MemberStatus.ACTIVE },
+      select: ['id'],
+    });
+    if (!member) throw new NotFoundException('Member not found');
+
+    const reviews = await this.reviewRepository.find({
+      where: { receiverId: memberId },
+      select: ['id', 'star'],
+    });
+
+    const reviewCount = reviews.length;
+    const averageStar =
+      reviewCount > 0
+        ? Number(
+            (
+              reviews.reduce(
+                (sum, review) => sum + this.convertStarToNumber(review.star),
+                0,
+              ) / reviewCount
+            ).toFixed(2),
+          )
+        : 0;
+
+    const completedWorkCount = await this.chatRoomRepository.count({
+      where: {
+        artistId: memberId,
+        status: In([ChatRoomStatus.COMPLETED, ChatRoomStatus.REVIEWED]),
+      },
+    });
+
+    let topKeywords: ReviewKeywordCountDto[] = [];
+    if (reviews.length > 0) {
+      const reviewIds = reviews.map((review) => review.id);
+      const maps = await this.reviewKeywordMapRepository.find({
+        where: { reviewId: In(reviewIds) },
+        relations: ['keyword'],
+      });
+
+      const keywordCounter = new Map<string, number>();
+      maps.forEach((map) => {
+        if (!map.keyword || !map.keyword.keyword || !map.keyword.isActive) {
+          return;
+        }
+        const prev = keywordCounter.get(map.keyword.keyword) ?? 0;
+        keywordCounter.set(map.keyword.keyword, prev + 1);
+      });
+
+      topKeywords = [...keywordCounter.entries()]
+        .sort((a, b) => {
+          if (b[1] !== a[1]) {
+            return b[1] - a[1];
+          }
+          return a[0].localeCompare(b[0], 'ko');
+        })
+        .slice(0, 5)
+        .map(([keyword, count]) => new ReviewKeywordCountDto(keyword, count));
+    }
+
+    return new PublicReviewSummaryResponseDto(
+      averageStar,
+      reviewCount,
+      completedWorkCount,
+      topKeywords,
+    );
+  }
+
   async withdraw(memberId: number): Promise<void> {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Member not found');
@@ -239,6 +356,23 @@ export class MemberService {
 
     if (result.affected && result.affected > 0) {
       this.logger.log(`Deleted ${result.affected} expired TEMP members.`);
+    }
+  }
+
+  private convertStarToNumber(star: ReviewStar): number {
+    switch (star) {
+      case ReviewStar.ONE:
+        return 1;
+      case ReviewStar.TWO:
+        return 2;
+      case ReviewStar.THREE:
+        return 3;
+      case ReviewStar.FOUR:
+        return 4;
+      case ReviewStar.FIVE:
+        return 5;
+      default:
+        return 0;
     }
   }
 }
