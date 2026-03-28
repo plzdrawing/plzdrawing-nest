@@ -68,6 +68,7 @@ export class ChatController {
           postId: 1,
           description: '강아지 그림 요청드립니다.',
           price: 5000,
+          referenceImageObjectKeys: ['chat/request/1/2026/03/uuid1.png'],
         },
       },
     },
@@ -88,6 +89,29 @@ export class ChatController {
     @Body() dto: CreateChatRoomDto,
   ): Promise<ChatRoomCreateResponseDto> {
     return this.chatService.createChatRoom(member, dto);
+  }
+
+  @Post('request-images/upload-url')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '요청 참고 이미지 업로드 URL 발급',
+    description:
+      '요청하기 폼에서 사용할 참고 이미지 업로드용 S3 presigned URL을 발급합니다. 파일 최대 크기는 10MB이며, 생성된 objectKey는 POST /chats의 referenceImageObjectKeys로 전달해야 합니다.',
+  })
+  @ApiBody({ type: ChatImageUploadRequestDto })
+  @ApiResponse({
+    status: 201,
+    description: '업로드 URL 발급 성공',
+    type: ChatImageUploadResponseDto,
+  })
+  @ApiResponse({ status: 400, description: '잘못된 요청' })
+  @ApiResponse({ status: 401, description: '인증 실패' })
+  async createRequestImageUpload(
+    @GetUser() member: Member,
+    @Body() dto: ChatImageUploadRequestDto,
+  ): Promise<ChatImageUploadResponseDto> {
+    return this.chatService.createRequestImageUpload(member, dto);
   }
 
   @Get()

@@ -9,6 +9,8 @@ import { TagModule } from '../tag/tag.module';
 import { LikeModule } from '../like/like.module';
 import { ReviewModule } from '../review/review.module';
 import { MemberModule } from '../member/member.module';
+import { PostFeedQueryRepository } from './query/post-feed.query.repository';
+import { PostFeedMapper } from './mapper/post-feed.mapper';
 
 @Module({
   imports: [
@@ -19,7 +21,7 @@ import { MemberModule } from '../member/member.module';
     ReviewModule,
     MemberModule,
   ],
-  providers: [PostService],
+  providers: [PostService, PostFeedQueryRepository, PostFeedMapper],
   controllers: [PostController],
   exports: [PostService],
 })

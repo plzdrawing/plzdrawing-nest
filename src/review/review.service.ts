@@ -3,18 +3,24 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Brackets, In, Repository } from 'typeorm';
 import { Review } from '../entities/review.entity';
 import { ReviewKeyword } from '../entities/review-keyword.entity';
 import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Member } from '../entities/member.entity';
+import { LikeEntity } from '../entities/like-entity.entity';
+import { Scrap } from '../entities/scrap.entity';
 import { ChatRoomStatus, MessageType, ReviewStar } from '../common/enums';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
+import { ReviewListQueryDto } from './dto/review-list-query.dto';
+import { ReviewPageResponseDto } from './dto/review-page-response.dto';
+import { ReviewListItemDto } from './dto/review-list-item.dto';
 
 @Injectable()
 export class ReviewService {
@@ -29,6 +35,10 @@ export class ReviewService {
     private readonly chatRoomRepository: Repository<ChatRoom>,
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    @InjectRepository(LikeEntity)
+    private readonly likeRepository: Repository<LikeEntity>,
+    @InjectRepository(Scrap)
+    private readonly scrapRepository: Repository<Scrap>,
   ) {}
 
   async findSellingMemberStats(
@@ -143,6 +153,126 @@ export class ReviewService {
       receiverId: review.receiverId,
       createdAt: review.createdAt,
     };
+  }
+
+  async getLatestReviews(
+    queryDto: ReviewListQueryDto,
+    memberId?: number,
+  ): Promise<ReviewPageResponseDto> {
+    const { page = 1, limit = 10, q, scrappedOnly } = queryDto;
+
+    const qb = this.reviewRepository
+      .createQueryBuilder('review')
+      .leftJoinAndSelect('review.writer', 'writer')
+      .leftJoinAndSelect('review.post', 'post')
+      .leftJoinAndSelect('review.reviewKeywordMaps', 'reviewKeywordMap')
+      .leftJoinAndSelect('reviewKeywordMap.keyword', 'reviewKeyword');
+
+    const keyword = q?.trim();
+    if (keyword) {
+      qb.andWhere(
+        new Brackets((subQb) => {
+          subQb
+            .where('writer.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('review.content LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('reviewKeyword.keyword LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    if (scrappedOnly) {
+      if (!memberId) {
+        throw new UnauthorizedException(
+          'Authentication required for scrappedOnly filter',
+        );
+      }
+      qb.innerJoin('post.scraps', 'scrap', 'scrap.memberId = :memberId', {
+        memberId,
+      });
+    }
+
+    qb.orderBy('review.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .distinct(true);
+
+    const [reviews, total] = await qb.getManyAndCount();
+    const postIds = [...new Set(reviews.map((review) => review.postId))];
+    const likeMap = await this.countLikesByPostIds(postIds);
+    const scrappedPostIds =
+      memberId !== undefined
+        ? await this.findScrappedPostIds(memberId, postIds)
+        : new Set<number>();
+
+    const data: ReviewListItemDto[] = reviews.map((review) => {
+      const keywords = Array.from(
+        new Set(
+          (review.reviewKeywordMaps ?? [])
+            .map((map) => map.keyword?.keyword)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      );
+
+      return {
+        reviewId: review.id,
+        postId: review.postId,
+        writerId: review.writerId,
+        writerNickname: review.writer?.nickname ?? '',
+        star: review.star,
+        content: review.content ?? undefined,
+        keywords,
+        imageObjectKeys: review.imageObjectKeys ?? [],
+        likeCount: likeMap.get(review.postId) ?? 0,
+        isScrapped: scrappedPostIds.has(review.postId),
+        createdAt: review.createdAt,
+      };
+    });
+
+    return { data, total, page, limit };
+  }
+
+  private async countLikesByPostIds(
+    postIds: number[],
+  ): Promise<Map<number, number>> {
+    if (postIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.likeRepository
+      .createQueryBuilder('like')
+      .leftJoin('like.post', 'post')
+      .select('post.id', 'postId')
+      .addSelect('COUNT(like.id)', 'count')
+      .where('post.id IN (:...postIds)', { postIds })
+      .groupBy('post.id')
+      .getRawMany<{ postId: string; count: string }>();
+
+    const likeMap = new Map<number, number>();
+    rows.forEach((row) => {
+      likeMap.set(parseInt(row.postId, 10), parseInt(row.count, 10));
+    });
+    return likeMap;
+  }
+
+  private async findScrappedPostIds(
+    memberId: number,
+    postIds: number[],
+  ): Promise<Set<number>> {
+    if (postIds.length === 0) {
+      return new Set<number>();
+    }
+
+    const scraps = await this.scrapRepository.find({
+      where: {
+        memberId,
+        postId: In(postIds),
+      },
+    });
+    return new Set(scraps.map((scrap) => scrap.postId));
   }
 
   private convertStarToNumber(star: ReviewStar): number {

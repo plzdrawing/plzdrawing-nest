@@ -48,6 +48,22 @@ export class Post extends BaseEntity {
   content: string;
 
   @ApiProperty({
+    description: '소요 시간',
+    example: '10분',
+    required: false,
+  })
+  @Column({ name: 'time_taken', nullable: true })
+  timeTaken: string;
+
+  @ApiProperty({
+    description: '가격',
+    example: 12000,
+    required: false,
+  })
+  @Column({ nullable: true })
+  price: number;
+
+  @ApiProperty({
     description: '썸네일 URL',
     example: 'https://example.com/image.jpg',
   })
