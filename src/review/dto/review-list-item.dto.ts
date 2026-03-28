@@ -41,6 +41,12 @@ export class ReviewListItemDto {
   })
   imageObjectKeys: string[];
 
+  @ApiProperty({ description: '게시글 좋아요 수', example: 23 })
+  likeCount: number;
+
+  @ApiProperty({ description: '내가 찜한 게시글인지 여부', example: true })
+  isScrapped: boolean;
+
   @ApiProperty({ description: '작성일시' })
   createdAt: Date;
 }

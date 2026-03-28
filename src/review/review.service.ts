@@ -13,6 +13,8 @@ import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Member } from '../entities/member.entity';
+import { LikeEntity } from '../entities/like-entity.entity';
+import { Scrap } from '../entities/scrap.entity';
 import { ChatRoomStatus, MessageType, ReviewStar } from '../common/enums';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { ReviewResponseDto } from './dto/review-response.dto';
@@ -33,6 +35,10 @@ export class ReviewService {
     private readonly chatRoomRepository: Repository<ChatRoom>,
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
+    @InjectRepository(LikeEntity)
+    private readonly likeRepository: Repository<LikeEntity>,
+    @InjectRepository(Scrap)
+    private readonly scrapRepository: Repository<Scrap>,
   ) {}
 
   async findSellingMemberStats(
@@ -168,7 +174,9 @@ export class ReviewService {
         new Brackets((subQb) => {
           subQb
             .where('writer.nickname LIKE :keyword', { keyword: `%${keyword}%` })
-            .orWhere('review.content LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('review.content LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
             .orWhere('reviewKeyword.keyword LIKE :keyword', {
               keyword: `%${keyword}%`,
             });
@@ -193,6 +201,12 @@ export class ReviewService {
       .distinct(true);
 
     const [reviews, total] = await qb.getManyAndCount();
+    const postIds = [...new Set(reviews.map((review) => review.postId))];
+    const likeMap = await this.countLikesByPostIds(postIds);
+    const scrappedPostIds =
+      memberId !== undefined
+        ? await this.findScrappedPostIds(memberId, postIds)
+        : new Set<number>();
 
     const data: ReviewListItemDto[] = reviews.map((review) => {
       const keywords = Array.from(
@@ -212,11 +226,53 @@ export class ReviewService {
         content: review.content ?? undefined,
         keywords,
         imageObjectKeys: review.imageObjectKeys ?? [],
+        likeCount: likeMap.get(review.postId) ?? 0,
+        isScrapped: scrappedPostIds.has(review.postId),
         createdAt: review.createdAt,
       };
     });
 
     return { data, total, page, limit };
+  }
+
+  private async countLikesByPostIds(
+    postIds: number[],
+  ): Promise<Map<number, number>> {
+    if (postIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await this.likeRepository
+      .createQueryBuilder('like')
+      .leftJoin('like.post', 'post')
+      .select('post.id', 'postId')
+      .addSelect('COUNT(like.id)', 'count')
+      .where('post.id IN (:...postIds)', { postIds })
+      .groupBy('post.id')
+      .getRawMany<{ postId: string; count: string }>();
+
+    const likeMap = new Map<number, number>();
+    rows.forEach((row) => {
+      likeMap.set(parseInt(row.postId, 10), parseInt(row.count, 10));
+    });
+    return likeMap;
+  }
+
+  private async findScrappedPostIds(
+    memberId: number,
+    postIds: number[],
+  ): Promise<Set<number>> {
+    if (postIds.length === 0) {
+      return new Set<number>();
+    }
+
+    const scraps = await this.scrapRepository.find({
+      where: {
+        memberId,
+        postId: In(postIds),
+      },
+    });
+    return new Set(scraps.map((scrap) => scrap.postId));
   }
 
   private convertStarToNumber(star: ReviewStar): number {

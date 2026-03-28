@@ -8,10 +8,13 @@ import { ReviewKeywordMap } from '../entities/review-keyword-map.entity';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { UnauthorizedException } from '@nestjs/common';
+import { LikeEntity } from '../entities/like-entity.entity';
+import { Scrap } from '../entities/scrap.entity';
 
 describe('ReviewService', () => {
   let service: ReviewService;
   let latestQb: any;
+  let likeQb: any;
 
   const reviewRepository = {
     find: jest.fn(),
@@ -32,6 +35,12 @@ describe('ReviewService', () => {
     create: jest.fn(),
     save: jest.fn(),
   };
+  const likeRepository = {
+    createQueryBuilder: jest.fn(),
+  };
+  const scrapRepository = {
+    find: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -47,6 +56,17 @@ describe('ReviewService', () => {
       getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
     };
     reviewRepository.createQueryBuilder.mockReturnValue(latestQb);
+
+    likeQb = {
+      leftJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+    likeRepository.createQueryBuilder.mockReturnValue(likeQb);
+    scrapRepository.find.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -70,6 +90,14 @@ describe('ReviewService', () => {
         {
           provide: getRepositoryToken(Message),
           useValue: messageRepository,
+        },
+        {
+          provide: getRepositoryToken(LikeEntity),
+          useValue: likeRepository,
+        },
+        {
+          provide: getRepositoryToken(Scrap),
+          useValue: scrapRepository,
         },
       ],
     }).compile();
@@ -140,11 +168,16 @@ describe('ReviewService', () => {
         ],
         1,
       ]);
+      likeQb.getRawMany.mockResolvedValue([{ postId: '11', count: '23' }]);
+      scrapRepository.find.mockResolvedValue([{ postId: 11 }]);
 
-      const result = await service.getLatestReviews({
-        page: 1,
-        limit: 10,
-      } as any);
+      const result = await service.getLatestReviews(
+        {
+          page: 1,
+          limit: 10,
+        } as any,
+        100,
+      );
 
       expect(result.total).toBe(1);
       expect(result.data[0]).toEqual({
@@ -156,6 +189,8 @@ describe('ReviewService', () => {
         content: '아주 만족!',
         keywords: ['친절해요', '섬세해요'],
         imageObjectKeys: ['review/1/2026/03/a.jpg'],
+        likeCount: 23,
+        isScrapped: true,
         createdAt: now,
       });
     });
