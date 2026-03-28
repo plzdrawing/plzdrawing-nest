@@ -13,6 +13,7 @@ import { TagModule } from './tag/tag.module';
 import { LikeModule } from './like/like.module';
 import { ReviewModule } from './review/review.module';
 import { ChatModule } from './chat/chat.module';
+import { ScrapModule } from './scrap/scrap.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ChatModule } from './chat/chat.module';
     LikeModule,
     ReviewModule,
     ChatModule,
+    ScrapModule,
   ],
   controllers: [AppController],
   providers: [AppService],
