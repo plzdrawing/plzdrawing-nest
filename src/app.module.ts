@@ -13,6 +13,9 @@ import { TagModule } from './tag/tag.module';
 import { LikeModule } from './like/like.module';
 import { ReviewModule } from './review/review.module';
 import { ChatModule } from './chat/chat.module';
+import { SettingsModule } from './settings/settings.module';
+import { NoticeModule } from './notice/notice.module';
+import { InquiryModule } from './inquiry/inquiry.module';
 
 @Module({
   imports: [
@@ -46,6 +49,9 @@ import { ChatModule } from './chat/chat.module';
     LikeModule,
     ReviewModule,
     ChatModule,
+    SettingsModule,
+    NoticeModule,
+    InquiryModule,
   ],
   controllers: [AppController],
   providers: [AppService],
