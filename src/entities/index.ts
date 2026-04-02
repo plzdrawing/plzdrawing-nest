@@ -15,6 +15,7 @@ export * from './message.entity';
 export * from './payment-history.entity';
 export * from './refund-history.entity';
 export * from './notification.entity';
+export * from './notification-preference.entity';
 export * from './inquiry.entity';
 export * from './inquiry-image.entity';
 export * from './notice.entity';

@@ -21,6 +21,7 @@ import { Inquiry } from './inquiry.entity';
 import { Notice } from './notice.entity';
 import { Terms } from './terms.entity';
 import { Tag } from './tag.entity';
+import { NotificationPreference } from './notification-preference.entity';
 
 @Entity('member')
 export class Member extends BaseEntity {
@@ -113,6 +114,12 @@ export class Member extends BaseEntity {
     (notification: Notification) => notification.member,
   )
   notifications: Notification[];
+
+  @OneToOne(
+    () => NotificationPreference,
+    (notificationPreference) => notificationPreference.member,
+  )
+  notificationPreference: NotificationPreference;
 
   @OneToMany(
     () => Notification,
