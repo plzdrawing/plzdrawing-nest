@@ -26,6 +26,7 @@ import { Member } from '../entities/member.entity';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
+import { NicknameAvailabilityResponseDto } from './dto/nickname-availability-response.dto';
 
 @ApiTags('Member')
 @Controller('member')
@@ -155,11 +156,14 @@ export class MemberController {
   @ApiResponse({
     status: 200,
     description: '닉네임 사용 가능 여부',
-    type: Boolean,
+    type: NicknameAvailabilityResponseDto,
   })
   @ApiResponse({ status: 400, description: '잘못된 요청 (닉네임 미입력 등)' })
-  async checkNickname(@Query('nickname') nickname: string): Promise<boolean> {
-    return this.memberService.checkNickname(nickname);
+  async checkNickname(
+    @Query('nickname') nickname: string,
+  ): Promise<NicknameAvailabilityResponseDto> {
+    const isTaken = await this.memberService.checkNickname(nickname);
+    return new NicknameAvailabilityResponseDto(!isTaken);
   }
 
   @Delete('v1/withdraw')

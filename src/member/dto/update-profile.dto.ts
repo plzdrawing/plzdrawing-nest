@@ -1,11 +1,25 @@
-import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+
+const PROFILE_NICKNAME_REGEX = /^[A-Za-z0-9가-힣]+$/;
+const PROFILE_HASHTAG_REGEX = /^[A-Za-z0-9가-힣]+$/;
 
 export class UpdateProfileDto {
   @ApiPropertyOptional({ description: '닉네임', example: '홍길동' })
   @IsString()
   @IsOptional()
+  @MaxLength(20)
+  @Matches(PROFILE_NICKNAME_REGEX, {
+    message: 'nickname must contain only Korean, English letters, and numbers',
+  })
   nickname?: string;
 
   @ApiPropertyOptional({ description: '자기소개', example: '안녕하세요.' })
@@ -20,12 +34,27 @@ export class UpdateProfileDto {
   })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
-      return value.split(',').map((v) => v.trim());
+      return value
+        .split(',')
+        .map((v) => v.trim().replace(/^#/, ''))
+        .filter(Boolean);
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map((v) => (typeof v === 'string' ? v.trim().replace(/^#/, '') : v))
+        .filter(Boolean);
     }
     return value;
   })
   @IsArray()
   @IsOptional()
+  @ArrayMaxSize(5)
   @IsString({ each: true })
+  @MaxLength(10, { each: true })
+  @Matches(PROFILE_HASHTAG_REGEX, {
+    each: true,
+    message:
+      'each hashtag must contain only Korean, English letters, and numbers',
+  })
   hashTag?: string[];
 }

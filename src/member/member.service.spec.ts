@@ -153,7 +153,7 @@ describe('MemberService', () => {
         profileUrl: 'https://old/url.png',
         introduction: 'old',
       };
-      const file = { originalname: 'a.png' } as any;
+      const file = { originalname: 'a.png', mimetype: 'image/png' } as any;
 
       memberRepository.findOne.mockResolvedValueOnce(member);
       awsService.uploadFile.mockResolvedValue('https://new/url.png');
@@ -189,7 +189,7 @@ describe('MemberService', () => {
         profileUrl: 'https://old/profile.png',
         introduction: 'old intro',
       };
-      const file = { originalname: 'new.png' } as any;
+      const file = { originalname: 'new.png', mimetype: 'image/png' } as any;
       memberRepository.findOne.mockResolvedValueOnce(member);
       awsService.uploadFile.mockResolvedValue('https://new/profile.png');
       profileRepository.findOne.mockResolvedValue(profile);
