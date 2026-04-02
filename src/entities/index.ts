@@ -20,3 +20,6 @@ export * from './inquiry.entity';
 export * from './inquiry-image.entity';
 export * from './notice.entity';
 export * from './terms.entity';
+export * from './wallet.entity';
+export * from './wallet-transaction.entity';
+export * from './coin-product.entity';

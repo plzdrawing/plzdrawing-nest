@@ -22,6 +22,8 @@ import { Notice } from './notice.entity';
 import { Terms } from './terms.entity';
 import { Tag } from './tag.entity';
 import { NotificationPreference } from './notification-preference.entity';
+import { Wallet } from './wallet.entity';
+import { WalletTransaction } from './wallet-transaction.entity';
 
 @Entity('member')
 export class Member extends BaseEntity {
@@ -121,6 +123,9 @@ export class Member extends BaseEntity {
   )
   notificationPreference: NotificationPreference;
 
+  @OneToOne(() => Wallet, (wallet) => wallet.member)
+  wallet: Wallet;
+
   @OneToMany(
     () => Notification,
     (notification: Notification) => notification.sender,
@@ -144,4 +149,10 @@ export class Member extends BaseEntity {
 
   @OneToMany(() => Terms, (terms: Terms) => terms.admin)
   terms: Terms[];
+
+  @OneToMany(
+    () => WalletTransaction,
+    (walletTransaction) => walletTransaction.member,
+  )
+  walletTransactions: WalletTransaction[];
 }

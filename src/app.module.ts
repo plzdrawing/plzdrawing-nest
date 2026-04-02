@@ -16,6 +16,7 @@ import { ChatModule } from './chat/chat.module';
 import { SettingsModule } from './settings/settings.module';
 import { NoticeModule } from './notice/notice.module';
 import { InquiryModule } from './inquiry/inquiry.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { InquiryModule } from './inquiry/inquiry.module';
     SettingsModule,
     NoticeModule,
     InquiryModule,
+    WalletModule,
   ],
   controllers: [AppController],
   providers: [AppService],
