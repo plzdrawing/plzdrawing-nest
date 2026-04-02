@@ -38,6 +38,11 @@ export class InquiryResponseDto {
   })
   answeredAt: Date | null;
 
+  @ApiProperty({
+    example: ['https://example.com/inquiry/image-1.png'],
+  })
+  imageUrls: string[];
+
   constructor(
     id: number,
     category: InquiryCategory,
@@ -47,6 +52,7 @@ export class InquiryResponseDto {
     answer: string | null,
     createdAt: Date,
     answeredAt: Date | null,
+    imageUrls: string[],
   ) {
     this.id = id;
     this.category = category;
@@ -56,5 +62,6 @@ export class InquiryResponseDto {
     this.answer = answer;
     this.createdAt = createdAt;
     this.answeredAt = answeredAt;
+    this.imageUrls = imageUrls;
   }
 }
