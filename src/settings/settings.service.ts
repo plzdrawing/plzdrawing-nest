@@ -6,6 +6,8 @@ import { TagStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
 import { Terms } from '../entities/terms.entity';
+import { Wallet } from '../entities/wallet.entity';
+import { WithdrawAccountService } from '../withdraw-account/withdraw-account.service';
 import { AppInfoResponseDto } from './dto/app-info-response.dto';
 import { NotificationPreferenceResponseDto } from './dto/notification-preference-response.dto';
 import { SettingsSummaryResponseDto } from './dto/settings-summary-response.dto';
@@ -21,6 +23,9 @@ export class SettingsService {
     private readonly notificationPreferenceRepository: Repository<NotificationPreference>,
     @InjectRepository(Terms)
     private readonly termsRepository: Repository<Terms>,
+    @InjectRepository(Wallet)
+    private readonly walletRepository: Repository<Wallet>,
+    private readonly withdrawAccountService: WithdrawAccountService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -36,6 +41,11 @@ export class SettingsService {
     const preference = await this.notificationPreferenceRepository.findOne({
       where: { memberId },
     });
+    const wallet = await this.walletRepository.findOne({
+      where: { memberId },
+    });
+    const hasWithdrawAccount =
+      await this.withdrawAccountService.hasActiveWithdrawAccount(memberId);
 
     const activeTags = member.memberTags
       .filter((memberTag) => memberTag.status === TagStatus.ACTIVE)
@@ -45,8 +55,8 @@ export class SettingsService {
       member.nickname,
       member.profile?.profileUrl ?? null,
       activeTags,
-      null,
-      false,
+      wallet?.balance ?? 0,
+      hasWithdrawAccount,
       preference?.allEnabled ?? true,
     );
   }
