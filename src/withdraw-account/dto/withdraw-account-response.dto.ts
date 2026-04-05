@@ -17,6 +17,21 @@ export class WithdrawAccountResponseDto {
   @ApiProperty({ example: '123456******34' })
   accountNumberMasked: string;
 
+  @ApiProperty({ example: 15, nullable: true })
+  memberId: number | null;
+
+  @ApiProperty({ example: '그림좋아', nullable: true })
+  memberNickname: string | null;
+
+  @ApiProperty({ example: 'user@example.com', nullable: true })
+  memberEmail: string | null;
+
+  @ApiProperty({
+    example: 'https://cdn.example.com/profile.png',
+    nullable: true,
+  })
+  memberProfileUrl: string | null;
+
   @ApiProperty({ example: true })
   isPrimary: boolean;
 
@@ -38,6 +53,10 @@ export class WithdrawAccountResponseDto {
     bankName: string,
     accountHolder: string,
     accountNumberMasked: string,
+    memberId: number | null,
+    memberNickname: string | null,
+    memberEmail: string | null,
+    memberProfileUrl: string | null,
     isPrimary: boolean,
     status: WithdrawAccountStatus,
     verifiedAt: Date | null,
@@ -48,6 +67,10 @@ export class WithdrawAccountResponseDto {
     this.bankName = bankName;
     this.accountHolder = accountHolder;
     this.accountNumberMasked = accountNumberMasked;
+    this.memberId = memberId;
+    this.memberNickname = memberNickname;
+    this.memberEmail = memberEmail;
+    this.memberProfileUrl = memberProfileUrl;
     this.isPrimary = isPrimary;
     this.status = status;
     this.verifiedAt = verifiedAt;

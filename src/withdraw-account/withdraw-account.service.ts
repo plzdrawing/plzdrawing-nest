@@ -172,7 +172,8 @@ export class WithdrawAccountService {
 
     const queryBuilder = this.withdrawAccountRepository
       .createQueryBuilder('withdrawAccount')
-      .leftJoin('withdrawAccount.member', 'member')
+      .leftJoinAndSelect('withdrawAccount.member', 'member')
+      .leftJoinAndSelect('member.profile', 'profile')
       .orderBy('withdrawAccount.verifiedAt', 'DESC')
       .addOrderBy('withdrawAccount.createdAt', 'DESC');
 
@@ -278,6 +279,10 @@ export class WithdrawAccountService {
       account.bankName,
       account.accountHolder,
       account.accountNumberMasked,
+      account.member?.id ?? account.memberId ?? null,
+      account.member?.nickname ?? null,
+      account.member?.email ?? null,
+      account.member?.profile?.profileUrl ?? null,
       account.isPrimary,
       account.status,
       account.verifiedAt ?? null,

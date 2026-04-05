@@ -299,10 +299,19 @@ describe('WithdrawService', () => {
       const queryBuilder = createQueryBuilderMock([
         {
           id: 1,
+          memberId: 10,
           withdrawAccountId: 11,
           withdrawAccount: {
             bankName: '국민은행',
             accountNumberMasked: '123456******34',
+          },
+          member: {
+            id: 10,
+            nickname: '그림좋아',
+            email: 'user@example.com',
+            profile: {
+              profileUrl: 'https://cdn.example.com/profile.png',
+            },
           },
           coinAmount: 10,
           cashAmount: 500,
@@ -331,6 +340,7 @@ describe('WithdrawService', () => {
       );
       expect(queryBuilder.andWhere).toHaveBeenCalled();
       expect(result).toHaveLength(1);
+      expect(result[0].memberNickname).toBe('그림좋아');
     });
   });
 });
@@ -338,7 +348,6 @@ describe('WithdrawService', () => {
 function createQueryBuilderMock(result: any[]) {
   return {
     leftJoinAndSelect: jest.fn().mockReturnThis(),
-    leftJoin: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     getMany: jest.fn().mockResolvedValue(result),

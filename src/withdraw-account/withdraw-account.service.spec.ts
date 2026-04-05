@@ -209,10 +209,19 @@ describe('WithdrawAccountService', () => {
       const queryBuilder = createQueryBuilderMock([
         {
           id: 1,
+          memberId: 10,
           bankCode: '004',
           bankName: '국민은행',
           accountHolder: '홍길동',
           accountNumberMasked: '123456******34',
+          member: {
+            id: 10,
+            nickname: '그림좋아',
+            email: 'user@example.com',
+            profile: {
+              profileUrl: 'https://cdn.example.com/profile.png',
+            },
+          },
           isPrimary: true,
           status: WithdrawAccountStatus.ACTIVE,
           verifiedAt: new Date('2026-04-05T00:00:00.000Z'),
@@ -237,6 +246,7 @@ describe('WithdrawAccountService', () => {
       );
       expect(queryBuilder.andWhere).toHaveBeenCalled();
       expect(result).toHaveLength(1);
+      expect(result[0].memberNickname).toBe('그림좋아');
     });
   });
 });
@@ -255,7 +265,7 @@ function encryptAccountNumber(secret: string, accountNumber: string): string {
 
 function createQueryBuilderMock(result: any[]) {
   return {
-    leftJoin: jest.fn().mockReturnThis(),
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     addOrderBy: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),

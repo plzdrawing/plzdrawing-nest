@@ -197,7 +197,8 @@ export class WithdrawService {
     const queryBuilder = this.withdrawRequestRepository
       .createQueryBuilder('withdrawRequest')
       .leftJoinAndSelect('withdrawRequest.withdrawAccount', 'withdrawAccount')
-      .leftJoin('withdrawRequest.member', 'member')
+      .leftJoinAndSelect('withdrawRequest.member', 'member')
+      .leftJoinAndSelect('member.profile', 'profile')
       .orderBy('withdrawRequest.createdAt', 'DESC');
 
     if (query.status) {
@@ -360,6 +361,10 @@ export class WithdrawService {
       request.withdrawAccountId,
       request.withdrawAccount?.bankName ?? '',
       request.withdrawAccount?.accountNumberMasked ?? '',
+      request.member?.id ?? request.memberId ?? null,
+      request.member?.nickname ?? null,
+      request.member?.email ?? null,
+      request.member?.profile?.profileUrl ?? null,
       request.coinAmount,
       request.cashAmount,
       request.feeAmount,

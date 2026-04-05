@@ -14,6 +14,21 @@ export class WithdrawRequestResponseDto {
   @ApiProperty({ example: '123456******34' })
   accountNumberMasked: string;
 
+  @ApiProperty({ example: 15, nullable: true })
+  memberId: number | null;
+
+  @ApiProperty({ example: '그림좋아', nullable: true })
+  memberNickname: string | null;
+
+  @ApiProperty({ example: 'user@example.com', nullable: true })
+  memberEmail: string | null;
+
+  @ApiProperty({
+    example: 'https://cdn.example.com/profile.png',
+    nullable: true,
+  })
+  memberProfileUrl: string | null;
+
   @ApiProperty({ example: 10 })
   coinAmount: number;
 
@@ -43,6 +58,10 @@ export class WithdrawRequestResponseDto {
     withdrawAccountId: number,
     bankName: string,
     accountNumberMasked: string,
+    memberId: number | null,
+    memberNickname: string | null,
+    memberEmail: string | null,
+    memberProfileUrl: string | null,
     coinAmount: number,
     cashAmount: number,
     feeAmount: number,
@@ -55,6 +74,10 @@ export class WithdrawRequestResponseDto {
     this.withdrawAccountId = withdrawAccountId;
     this.bankName = bankName;
     this.accountNumberMasked = accountNumberMasked;
+    this.memberId = memberId;
+    this.memberNickname = memberNickname;
+    this.memberEmail = memberEmail;
+    this.memberProfileUrl = memberProfileUrl;
     this.coinAmount = coinAmount;
     this.cashAmount = cashAmount;
     this.feeAmount = feeAmount;
