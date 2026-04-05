@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
@@ -20,6 +21,7 @@ import { WithdrawAccount } from '../entities/withdraw-account.entity';
 import { WithdrawRequest } from '../entities/withdraw-request.entity';
 import { CreateWithdrawRequestDto } from './dto/create-withdraw-request.dto';
 import { UpdateWithdrawRequestAdminDto } from './dto/update-withdraw-request-admin.dto';
+import { WithdrawPolicyResponseDto } from './dto/withdraw-policy-response.dto';
 import { WithdrawRequestResponseDto } from './dto/withdraw-request-response.dto';
 
 @Injectable()
@@ -36,7 +38,18 @@ export class WithdrawService {
     @InjectRepository(WalletTransaction)
     private readonly walletTransactionRepository: Repository<WalletTransaction>,
     private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
   ) {}
+
+  getPolicy(): WithdrawPolicyResponseDto {
+    const policy = this.getWithdrawPolicy();
+    return new WithdrawPolicyResponseDto(
+      policy.minimumCoinAmount,
+      policy.coinUnit,
+      policy.cashPerCoin,
+      policy.flatFeeAmount,
+    );
+  }
 
   async create(
     memberId: number,
@@ -85,9 +98,27 @@ export class WithdrawService {
         throw new BadRequestException('Withdraw account is not verified');
       }
 
+      const policy = this.getWithdrawPolicy();
+      if (dto.coinAmount < policy.minimumCoinAmount) {
+        throw new BadRequestException(
+          `Minimum withdraw coin amount is ${policy.minimumCoinAmount}`,
+        );
+      }
+      if (dto.coinAmount % policy.coinUnit !== 0) {
+        throw new BadRequestException(
+          `Withdraw coin amount must be in units of ${policy.coinUnit}`,
+        );
+      }
+
       const wallet = await walletRepository.findOne({ where: { memberId } });
       if (!wallet || wallet.balance < dto.coinAmount) {
         throw new BadRequestException('Not enough coin balance');
+      }
+
+      const grossCashAmount = dto.coinAmount * policy.cashPerCoin;
+      const cashAmount = grossCashAmount - policy.flatFeeAmount;
+      if (cashAmount <= 0) {
+        throw new BadRequestException('Withdraw amount is too small after fee');
       }
 
       wallet.balance -= dto.coinAmount;
@@ -98,8 +129,8 @@ export class WithdrawService {
           memberId,
           withdrawAccountId: withdrawAccount.id,
           coinAmount: dto.coinAmount,
-          cashAmount: dto.coinAmount,
-          feeAmount: 0,
+          cashAmount,
+          feeAmount: policy.flatFeeAmount,
           status: WithdrawRequestStatus.REQUESTED,
           reason: null,
         }),
@@ -110,7 +141,7 @@ export class WithdrawService {
           memberId,
           type: WalletTransactionType.WITHDRAW_REQUEST,
           coinAmount: -dto.coinAmount,
-          cashAmount: dto.coinAmount,
+          cashAmount,
           status: WalletTransactionStatus.COMPLETED,
           description: `${dto.coinAmount}코인 환전 신청`,
           sourceType: 'WITHDRAW_REQUEST',
@@ -293,5 +324,32 @@ export class WithdrawService {
       request.processedAt ?? null,
       request.createdAt,
     );
+  }
+
+  private getWithdrawPolicy(): {
+    minimumCoinAmount: number;
+    coinUnit: number;
+    cashPerCoin: number;
+    flatFeeAmount: number;
+  } {
+    const minimumCoinAmount = Number(
+      this.configService.get<string>('WITHDRAW_MINIMUM_COIN_AMOUNT') ?? '10',
+    );
+    const coinUnit = Number(
+      this.configService.get<string>('WITHDRAW_COIN_UNIT') ?? '10',
+    );
+    const cashPerCoin = Number(
+      this.configService.get<string>('WITHDRAW_CASH_PER_COIN') ?? '100',
+    );
+    const flatFeeAmount = Number(
+      this.configService.get<string>('WITHDRAW_FLAT_FEE_AMOUNT') ?? '0',
+    );
+
+    return {
+      minimumCoinAmount,
+      coinUnit,
+      cashPerCoin,
+      flatFeeAmount,
+    };
   }
 }

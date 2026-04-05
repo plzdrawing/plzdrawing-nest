@@ -19,6 +19,7 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateWithdrawRequestDto } from './dto/create-withdraw-request.dto';
 import { UpdateWithdrawRequestAdminDto } from './dto/update-withdraw-request-admin.dto';
+import { WithdrawPolicyResponseDto } from './dto/withdraw-policy-response.dto';
 import { WithdrawRequestResponseDto } from './dto/withdraw-request-response.dto';
 import { WithdrawService } from './withdraw.service';
 
@@ -28,6 +29,17 @@ import { WithdrawService } from './withdraw.service';
 @Controller('withdraw')
 export class WithdrawController {
   constructor(private readonly withdrawService: WithdrawService) {}
+
+  @Get('v1/policy')
+  @ApiOperation({ summary: '환전 정책 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '환전 정책 조회 성공',
+    type: WithdrawPolicyResponseDto,
+  })
+  getPolicy(): WithdrawPolicyResponseDto {
+    return this.withdrawService.getPolicy();
+  }
 
   @Post('v1/requests')
   @ApiOperation({ summary: '환전 신청' })
