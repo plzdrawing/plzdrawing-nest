@@ -25,6 +25,7 @@ import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
+import { TossPaymentsService } from './toss-payments.service';
 
 @Injectable()
 export class WalletService {
@@ -40,6 +41,7 @@ export class WalletService {
     @InjectRepository(CoinOrder)
     private readonly coinOrderRepository: Repository<CoinOrder>,
     private readonly dataSource: DataSource,
+    private readonly tossPaymentsService: TossPaymentsService,
   ) {}
 
   async getMyWallet(memberId: number): Promise<WalletSummaryResponseDto> {
@@ -161,6 +163,21 @@ export class WalletService {
       if (order.status !== PaymentStatus.PENDING) {
         throw new BadRequestException('Coin order is not in pending status');
       }
+      if (dto.amount !== order.amount) {
+        throw new BadRequestException('Coin order amount does not match');
+      }
+
+      const tossPayment = await this.tossPaymentsService.confirmPayment(
+        dto.paymentKey,
+        order.orderCode,
+        dto.amount,
+      );
+      if (tossPayment.orderId !== order.orderCode) {
+        throw new BadRequestException('Toss payment order does not match');
+      }
+      if (tossPayment.totalAmount !== order.amount) {
+        throw new BadRequestException('Toss payment amount does not match');
+      }
 
       let wallet = await walletRepository.findOne({
         where: { memberId },
@@ -176,8 +193,10 @@ export class WalletService {
       const savedWallet = await walletRepository.save(wallet);
 
       order.status = PaymentStatus.COMPLETED;
-      order.paymentKey = dto.paymentKey ?? null;
-      order.approvedAt = new Date();
+      order.paymentKey = tossPayment.paymentKey;
+      order.approvedAt = tossPayment.approvedAt
+        ? new Date(tossPayment.approvedAt)
+        : new Date();
       const savedOrder = await orderRepository.save(order);
 
       await walletTransactionRepository.save(

@@ -1,13 +1,20 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsInt, IsString, MaxLength, Min } from 'class-validator';
 
 export class ConfirmCoinOrderDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'toss_payment_key_sample',
-    description: '실결제 연동 전까지는 선택값입니다.',
+    description: '토스 결제 성공 후 전달받은 paymentKey',
   })
-  @IsOptional()
   @IsString()
   @MaxLength(255)
-  paymentKey?: string;
+  paymentKey: string;
+
+  @ApiProperty({
+    example: 1200,
+    description: '토스 결제 성공 후 전달받은 결제 금액',
+  })
+  @IsInt()
+  @Min(0)
+  amount: number;
 }
