@@ -44,6 +44,18 @@ export class CoinOrderResponseDto {
   })
   approvedAt: Date | null;
 
+  @ApiProperty({
+    example: '사용자 요청에 의한 결제 취소',
+    nullable: true,
+  })
+  cancelReason: string | null;
+
+  @ApiProperty({
+    example: '2026-04-05 10:10:00',
+    nullable: true,
+  })
+  cancelledAt: Date | null;
+
   @ApiProperty({ example: '2026-04-05 09:59:00' })
   createdAt: Date;
 
@@ -58,6 +70,8 @@ export class CoinOrderResponseDto {
     status: PaymentStatus,
     paymentKey: string | null,
     approvedAt: Date | null,
+    cancelReason: string | null,
+    cancelledAt: Date | null,
     createdAt: Date,
   ) {
     this.id = id;
@@ -70,6 +84,8 @@ export class CoinOrderResponseDto {
     this.status = status;
     this.paymentKey = paymentKey;
     this.approvedAt = approvedAt;
+    this.cancelReason = cancelReason;
+    this.cancelledAt = cancelledAt;
     this.createdAt = createdAt;
   }
 }

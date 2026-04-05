@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   Post,
   Query,
@@ -11,6 +12,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiExcludeEndpoint,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -19,11 +21,13 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { WalletService } from './wallet.service';
+import { CancelCoinOrderDto } from './dto/cancel-coin-order.dto';
 import { CoinProductResponseDto } from './dto/coin-product-response.dto';
 import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
+import { TossWebhookDto } from './dto/toss-webhook.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 
@@ -139,5 +143,30 @@ export class WalletController {
     @Param('id') id: string,
   ): Promise<CoinOrderResponseDto> {
     return this.walletService.getCoinOrder(member.id, +id);
+  }
+
+  @Post('coin-shop/v1/orders/:id/cancel')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 주문 결제 취소' })
+  @ApiBody({ type: CancelCoinOrderDto })
+  @ApiResponse({
+    status: 200,
+    description: '코인 주문 결제 취소 성공',
+    type: CoinOrderResponseDto,
+  })
+  async cancelCoinOrder(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: CancelCoinOrderDto,
+  ): Promise<CoinOrderResponseDto> {
+    return this.walletService.cancelCoinOrder(member.id, +id, dto);
+  }
+
+  @Post('payments/v1/webhooks/toss')
+  @HttpCode(200)
+  @ApiExcludeEndpoint()
+  async handleTossWebhook(@Body() payload: TossWebhookDto): Promise<void> {
+    return this.walletService.handleTossWebhook(payload);
   }
 }

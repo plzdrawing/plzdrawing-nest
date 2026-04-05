@@ -103,6 +103,7 @@ export enum InquiryStatus {
 
 export enum WalletTransactionType {
   CHARGE = 'CHARGE',
+  REFUND = 'REFUND',
   USE = 'USE',
   EARN = 'EARN',
   WITHDRAW_REQUEST = 'WITHDRAW_REQUEST',

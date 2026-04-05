@@ -48,6 +48,12 @@ export class CoinOrder extends BaseEntity {
   @Column({ name: 'approved_at', nullable: true })
   approvedAt: Date | null;
 
+  @Column({ name: 'cancel_reason', nullable: true })
+  cancelReason: string | null;
+
+  @Column({ name: 'cancelled_at', nullable: true })
+  cancelledAt: Date | null;
+
   @ManyToOne(() => Member, (member) => member.coinOrders)
   @JoinColumn({ name: 'member_id' })
   member: Member;

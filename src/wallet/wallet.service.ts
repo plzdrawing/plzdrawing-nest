@@ -20,8 +20,10 @@ import { Wallet } from '../entities/wallet.entity';
 import { CoinProductResponseDto } from './dto/coin-product-response.dto';
 import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
+import { CancelCoinOrderDto } from './dto/cancel-coin-order.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
+import { TossWebhookDto } from './dto/toss-webhook.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
@@ -261,6 +263,119 @@ export class WalletService {
     return this.mapCoinOrder(order, order.coinProduct);
   }
 
+  async cancelCoinOrder(
+    memberId: number,
+    orderId: number,
+    dto: CancelCoinOrderDto,
+  ): Promise<CoinOrderResponseDto> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const orderRepository = queryRunner.manager.getRepository(CoinOrder);
+      const walletRepository = queryRunner.manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        queryRunner.manager.getRepository(WalletTransaction);
+
+      const order = await orderRepository.findOne({
+        where: { id: orderId, memberId },
+        relations: ['coinProduct'],
+      });
+      if (!order) {
+        throw new NotFoundException('Coin order not found');
+      }
+      if (order.status !== PaymentStatus.COMPLETED) {
+        throw new BadRequestException(
+          'Only completed coin orders can be cancelled',
+        );
+      }
+      if (!order.paymentKey) {
+        throw new BadRequestException('Payment key is missing');
+      }
+
+      const wallet = await walletRepository.findOne({ where: { memberId } });
+      if (!wallet) {
+        throw new NotFoundException('Wallet not found');
+      }
+      if (wallet.balance < order.coinAmount) {
+        throw new BadRequestException(
+          'Not enough coin balance to cancel this order',
+        );
+      }
+
+      const canceledPayment = await this.tossPaymentsService.cancelPayment(
+        order.paymentKey,
+        dto.cancelReason,
+      );
+      if (canceledPayment.orderId !== order.orderCode) {
+        throw new BadRequestException('Toss cancel order does not match');
+      }
+
+      wallet.balance -= order.coinAmount;
+      await walletRepository.save(wallet);
+
+      order.status = PaymentStatus.CANCELLED;
+      order.cancelReason = dto.cancelReason;
+      order.cancelledAt = new Date();
+      const savedOrder = await orderRepository.save(order);
+
+      await walletTransactionRepository.save(
+        walletTransactionRepository.create({
+          memberId,
+          type: WalletTransactionType.REFUND,
+          coinAmount: -order.coinAmount,
+          cashAmount: order.amount,
+          status: WalletTransactionStatus.COMPLETED,
+          description: `${order.coinAmount}코인 결제 취소`,
+          sourceType: 'COIN_ORDER',
+          sourceId: order.id,
+        }),
+      );
+
+      await queryRunner.commitTransaction();
+      return this.mapCoinOrder(savedOrder, savedOrder.coinProduct);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async handleTossWebhook(payload: TossWebhookDto): Promise<void> {
+    const orderId =
+      typeof payload.data?.orderId === 'string' ? payload.data.orderId : null;
+    const status =
+      typeof payload.data?.status === 'string' ? payload.data.status : null;
+    const paymentKey =
+      typeof payload.data?.paymentKey === 'string'
+        ? payload.data.paymentKey
+        : null;
+
+    if (!orderId || !status) {
+      return;
+    }
+
+    const order = await this.coinOrderRepository.findOne({
+      where: { orderCode: orderId },
+    });
+    if (!order) {
+      return;
+    }
+
+    if (
+      order.status === PaymentStatus.PENDING &&
+      ['ABORTED', 'EXPIRED', 'CANCELED'].includes(status)
+    ) {
+      order.status = PaymentStatus.CANCELLED;
+      order.paymentKey = paymentKey ?? order.paymentKey;
+      order.cancelReason = `Toss webhook status: ${status}`;
+      order.cancelledAt = new Date();
+      await this.coinOrderRepository.save(order);
+    }
+  }
+
   private async getOrCreateWallet(memberId: number): Promise<Wallet> {
     await this.assertMemberExists(memberId);
 
@@ -303,6 +418,8 @@ export class WalletService {
       order.status,
       order.paymentKey ?? null,
       order.approvedAt ?? null,
+      order.cancelReason ?? null,
+      order.cancelledAt ?? null,
       order.createdAt,
     );
   }
