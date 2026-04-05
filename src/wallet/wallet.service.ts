@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   PaymentMethod,
   PaymentStatus,
+  MemberRole,
   WalletTransactionStatus,
   WalletTransactionType,
 } from '../common/enums';
@@ -23,8 +25,10 @@ import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
 import { CancelCoinOrderDto } from './dto/cancel-coin-order.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
+import { CreateCoinProductDto } from './dto/create-coin-product.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { TossWebhookDto } from './dto/toss-webhook.dto';
+import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
@@ -103,8 +107,81 @@ export class WalletService {
           product.price,
           product.displayOrder,
           product.description,
+          product.isActive,
         ),
     );
+  }
+
+  async getCoinProductsForAdmin(
+    member: Member,
+  ): Promise<CoinProductResponseDto[]> {
+    this.assertAdmin(member);
+
+    const products = await this.coinProductRepository.find({
+      order: { displayOrder: 'ASC', id: 'ASC' },
+    });
+
+    return products.map((product) => this.mapCoinProduct(product));
+  }
+
+  async createCoinProduct(
+    member: Member,
+    dto: CreateCoinProductDto,
+  ): Promise<CoinProductResponseDto> {
+    this.assertAdmin(member);
+    await this.assertCoinProductUniqueness(dto.coinAmount, null);
+
+    const savedProduct = await this.coinProductRepository.save(
+      this.coinProductRepository.create({
+        name: dto.name.trim(),
+        coinAmount: dto.coinAmount,
+        price: dto.price,
+        displayOrder: dto.displayOrder,
+        description: dto.description?.trim() ?? null,
+        isActive: dto.isActive ?? true,
+      }),
+    );
+
+    return this.mapCoinProduct(savedProduct);
+  }
+
+  async updateCoinProduct(
+    member: Member,
+    productId: number,
+    dto: UpdateCoinProductDto,
+  ): Promise<CoinProductResponseDto> {
+    this.assertAdmin(member);
+
+    const product = await this.coinProductRepository.findOne({
+      where: { id: productId },
+    });
+    if (!product) {
+      throw new NotFoundException('Coin product not found');
+    }
+
+    if (dto.coinAmount !== undefined && dto.coinAmount !== product.coinAmount) {
+      await this.assertCoinProductUniqueness(dto.coinAmount, product.id);
+      product.coinAmount = dto.coinAmount;
+    }
+
+    if (dto.name !== undefined) {
+      product.name = dto.name.trim();
+    }
+    if (dto.price !== undefined) {
+      product.price = dto.price;
+    }
+    if (dto.displayOrder !== undefined) {
+      product.displayOrder = dto.displayOrder;
+    }
+    if (dto.description !== undefined) {
+      product.description = dto.description?.trim() ?? null;
+    }
+    if (dto.isActive !== undefined) {
+      product.isActive = dto.isActive;
+    }
+
+    const savedProduct = await this.coinProductRepository.save(product);
+    return this.mapCoinProduct(savedProduct);
   }
 
   async createCoinOrder(
@@ -453,6 +530,38 @@ export class WalletService {
     if (!member) {
       throw new NotFoundException('Member not found');
     }
+  }
+
+  private assertAdmin(member: Member): void {
+    if (member.role !== MemberRole.ROLE_ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
+  }
+
+  private async assertCoinProductUniqueness(
+    coinAmount: number,
+    productId: number | null,
+  ): Promise<void> {
+    const existingProduct = await this.coinProductRepository.findOne({
+      where: { coinAmount },
+    });
+    if (existingProduct && existingProduct.id !== productId) {
+      throw new BadRequestException(
+        'Coin product with same amount already exists',
+      );
+    }
+  }
+
+  private mapCoinProduct(product: CoinProduct): CoinProductResponseDto {
+    return new CoinProductResponseDto(
+      product.id,
+      product.name,
+      product.coinAmount,
+      product.price,
+      product.displayOrder,
+      product.description,
+      product.isActive,
+    );
   }
 
   private mapCoinOrder(

@@ -19,6 +19,9 @@ export class CoinProductResponseDto {
   @ApiProperty({ example: '신규 회원 추천 상품', nullable: true })
   description: string | null;
 
+  @ApiProperty({ example: true })
+  isActive: boolean;
+
   constructor(
     id: number,
     name: string,
@@ -26,6 +29,7 @@ export class CoinProductResponseDto {
     price: number,
     displayOrder: number,
     description: string | null,
+    isActive: boolean,
   ) {
     this.id = id;
     this.name = name;
@@ -33,5 +37,6 @@ export class CoinProductResponseDto {
     this.price = price;
     this.displayOrder = displayOrder;
     this.description = description;
+    this.isActive = isActive;
   }
 }

@@ -1,6 +1,6 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { PaymentMethod, PaymentStatus } from '../common/enums';
+import { MemberRole, PaymentMethod, PaymentStatus } from '../common/enums';
 import { CoinProduct } from '../entities/coin-product.entity';
 import { CoinOrder } from '../entities/coin-order.entity';
 import { Member } from '../entities/member.entity';
@@ -30,6 +30,8 @@ describe('WalletService', () => {
   const coinProductRepository = {
     find: jest.fn(),
     findOne: jest.fn(),
+    save: jest.fn(),
+    create: jest.fn((data) => data),
   };
 
   const coinOrderRepository = {
@@ -102,6 +104,63 @@ describe('WalletService', () => {
 
   it('정의되어야 한다', () => {
     expect(service).toBeDefined();
+  });
+
+  it('관리자가 아니면 코인 상품을 등록할 수 없어야 한다', async () => {
+    await expect(
+      service.createCoinProduct({ role: MemberRole.ROLE_MEMBER } as Member, {
+        name: '그리코인 10개',
+        coinAmount: 10,
+        price: 1200,
+        displayOrder: 1,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('관리자는 코인 상품을 등록할 수 있어야 한다', async () => {
+    coinProductRepository.findOne.mockResolvedValue(null);
+    coinProductRepository.save.mockImplementation(async (data) => ({
+      id: 10,
+      isActive: true,
+      description: null,
+      ...data,
+    }));
+
+    const result = await service.createCoinProduct(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      {
+        name: '그리코인 10개',
+        coinAmount: 10,
+        price: 1200,
+        displayOrder: 1,
+      },
+    );
+
+    expect(result.coinAmount).toBe(10);
+    expect(result.isActive).toBe(true);
+  });
+
+  it('코인 수량이 중복되면 코인 상품 수정을 막아야 한다', async () => {
+    coinProductRepository.findOne
+      .mockResolvedValueOnce({
+        id: 1,
+        name: '그리코인 10개',
+        coinAmount: 10,
+        price: 1200,
+        displayOrder: 1,
+        description: null,
+        isActive: true,
+      })
+      .mockResolvedValueOnce({
+        id: 2,
+        coinAmount: 30,
+      });
+
+    await expect(
+      service.updateCoinProduct({ role: MemberRole.ROLE_ADMIN } as Member, 1, {
+        coinAmount: 30,
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('이미 사용한 paymentKey면 결제 승인을 막아야 한다', async () => {

@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -26,8 +27,10 @@ import { CoinProductResponseDto } from './dto/coin-product-response.dto';
 import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
+import { CreateCoinProductDto } from './dto/create-coin-product.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { TossWebhookDto } from './dto/toss-webhook.dto';
+import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 
@@ -76,6 +79,56 @@ export class WalletController {
   })
   async getCoinProducts(): Promise<CoinProductResponseDto[]> {
     return this.walletService.getCoinProducts();
+  }
+
+  @Get('coin-shop/v1/admin/products')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 상품 목록 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '코인 상품 목록 조회 성공',
+    type: [CoinProductResponseDto],
+  })
+  async getCoinProductsForAdmin(
+    @GetUser() member: Member,
+  ): Promise<CoinProductResponseDto[]> {
+    return this.walletService.getCoinProductsForAdmin(member);
+  }
+
+  @Post('coin-shop/v1/admin/products')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 상품 등록 (관리자)' })
+  @ApiBody({ type: CreateCoinProductDto })
+  @ApiResponse({
+    status: 201,
+    description: '코인 상품 등록 성공',
+    type: CoinProductResponseDto,
+  })
+  async createCoinProduct(
+    @GetUser() member: Member,
+    @Body() dto: CreateCoinProductDto,
+  ): Promise<CoinProductResponseDto> {
+    return this.walletService.createCoinProduct(member, dto);
+  }
+
+  @Patch('coin-shop/v1/admin/products/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 상품 수정 (관리자)' })
+  @ApiBody({ type: UpdateCoinProductDto })
+  @ApiResponse({
+    status: 200,
+    description: '코인 상품 수정 성공',
+    type: CoinProductResponseDto,
+  })
+  async updateCoinProduct(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: UpdateCoinProductDto,
+  ): Promise<CoinProductResponseDto> {
+    return this.walletService.updateCoinProduct(member, +id, dto);
   }
 
   @Post('coin-shop/v1/orders')
