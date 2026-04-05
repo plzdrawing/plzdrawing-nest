@@ -116,3 +116,8 @@ export enum WalletTransactionStatus {
   FAILED = 'FAILED',
   CANCELLED = 'CANCELLED',
 }
+
+export enum WithdrawAccountStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}

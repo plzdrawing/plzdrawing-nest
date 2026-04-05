@@ -25,6 +25,7 @@ import { NotificationPreference } from './notification-preference.entity';
 import { Wallet } from './wallet.entity';
 import { WalletTransaction } from './wallet-transaction.entity';
 import { CoinOrder } from './coin-order.entity';
+import { WithdrawAccount } from './withdraw-account.entity';
 
 @Entity('member')
 export class Member extends BaseEntity {
@@ -159,4 +160,7 @@ export class Member extends BaseEntity {
 
   @OneToMany(() => CoinOrder, (coinOrder) => coinOrder.member)
   coinOrders: CoinOrder[];
+
+  @OneToMany(() => WithdrawAccount, (withdrawAccount) => withdrawAccount.member)
+  withdrawAccounts: WithdrawAccount[];
 }
