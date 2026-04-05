@@ -25,3 +25,4 @@ export * from './wallet-transaction.entity';
 export * from './coin-product.entity';
 export * from './coin-order.entity';
 export * from './withdraw-account.entity';
+export * from './withdraw-request.entity';

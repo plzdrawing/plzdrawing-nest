@@ -3,11 +3,13 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { WithdrawAccountStatus } from '../common/enums';
 import { BaseEntity } from '../common/entities/base.entity';
 import { Member } from './member.entity';
+import { WithdrawRequest } from './withdraw-request.entity';
 
 @Entity('withdraw_account')
 export class WithdrawAccount extends BaseEntity {
@@ -48,4 +50,10 @@ export class WithdrawAccount extends BaseEntity {
   @ManyToOne(() => Member, (member) => member.withdrawAccounts)
   @JoinColumn({ name: 'member_id' })
   member: Member;
+
+  @OneToMany(
+    () => WithdrawRequest,
+    (withdrawRequest) => withdrawRequest.withdrawAccount,
+  )
+  withdrawRequests: WithdrawRequest[];
 }

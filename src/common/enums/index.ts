@@ -121,3 +121,11 @@ export enum WithdrawAccountStatus {
   ACTIVE = 'ACTIVE',
   INACTIVE = 'INACTIVE',
 }
+
+export enum WithdrawRequestStatus {
+  REQUESTED = 'REQUESTED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
