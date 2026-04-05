@@ -81,6 +81,9 @@ export class WithdrawService {
       if (!withdrawAccount) {
         throw new NotFoundException('Active withdraw account not found');
       }
+      if (!withdrawAccount.verifiedAt) {
+        throw new BadRequestException('Withdraw account is not verified');
+      }
 
       const wallet = await walletRepository.findOne({ where: { memberId } });
       if (!wallet || wallet.balance < dto.coinAmount) {

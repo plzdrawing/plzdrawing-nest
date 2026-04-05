@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -6,7 +7,6 @@ import {
   Patch,
   Post,
   UseGuards,
-  Body,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -20,6 +20,7 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { BankResponseDto } from './dto/bank-response.dto';
 import { CreateWithdrawAccountDto } from './dto/create-withdraw-account.dto';
+import { UpdateWithdrawAccountAdminDto } from './dto/update-withdraw-account-admin.dto';
 import { WithdrawAccountResponseDto } from './dto/withdraw-account-response.dto';
 import { WithdrawAccountService } from './withdraw-account.service';
 
@@ -99,5 +100,38 @@ export class WithdrawAccountController {
     @Param('id') id: string,
   ): Promise<void> {
     return this.withdrawAccountService.remove(member.id, +id);
+  }
+
+  @Get('withdraw-accounts/v1/admin')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '환전계좌 목록 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '환전계좌 목록 조회 성공',
+    type: [WithdrawAccountResponseDto],
+  })
+  async findAllForAdmin(
+    @GetUser() member: Member,
+  ): Promise<WithdrawAccountResponseDto[]> {
+    return this.withdrawAccountService.findAllForAdmin(member);
+  }
+
+  @Patch('withdraw-accounts/v1/admin/:id/verify')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '환전계좌 인증 처리 (관리자)' })
+  @ApiBody({ type: UpdateWithdrawAccountAdminDto })
+  @ApiResponse({
+    status: 200,
+    description: '환전계좌 인증 처리 성공',
+    type: WithdrawAccountResponseDto,
+  })
+  async verifyByAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: UpdateWithdrawAccountAdminDto,
+  ): Promise<WithdrawAccountResponseDto> {
+    return this.withdrawAccountService.verifyByAdmin(member, +id, dto);
   }
 }

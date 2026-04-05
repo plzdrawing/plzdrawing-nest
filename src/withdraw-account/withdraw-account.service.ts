@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,11 +8,12 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as crypto from 'crypto';
 import { Repository } from 'typeorm';
-import { WithdrawAccountStatus } from '../common/enums';
+import { MemberRole, WithdrawAccountStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { WithdrawAccount } from '../entities/withdraw-account.entity';
 import { BankResponseDto } from './dto/bank-response.dto';
 import { CreateWithdrawAccountDto } from './dto/create-withdraw-account.dto';
+import { UpdateWithdrawAccountAdminDto } from './dto/update-withdraw-account-admin.dto';
 import { WithdrawAccountResponseDto } from './dto/withdraw-account-response.dto';
 
 @Injectable()
@@ -161,12 +163,48 @@ export class WithdrawAccountService {
     return count > 0;
   }
 
+  async findAllForAdmin(member: Member): Promise<WithdrawAccountResponseDto[]> {
+    this.assertAdmin(member);
+
+    const accounts = await this.withdrawAccountRepository.find({
+      where: { status: WithdrawAccountStatus.ACTIVE },
+      order: { verifiedAt: 'DESC', createdAt: 'DESC' },
+    });
+
+    return accounts.map((account) => this.mapAccount(account));
+  }
+
+  async verifyByAdmin(
+    member: Member,
+    accountId: number,
+    _dto: UpdateWithdrawAccountAdminDto,
+  ): Promise<WithdrawAccountResponseDto> {
+    this.assertAdmin(member);
+
+    const account = await this.withdrawAccountRepository.findOne({
+      where: { id: accountId, status: WithdrawAccountStatus.ACTIVE },
+    });
+    if (!account) {
+      throw new NotFoundException('Withdraw account not found');
+    }
+
+    account.verifiedAt = new Date();
+    const savedAccount = await this.withdrawAccountRepository.save(account);
+    return this.mapAccount(savedAccount);
+  }
+
   private async assertMemberExists(memberId: number): Promise<void> {
     const member = await this.memberRepository.findOne({
       where: { id: memberId },
     });
     if (!member) {
       throw new NotFoundException('Member not found');
+    }
+  }
+
+  private assertAdmin(member: Member): void {
+    if (member.role !== MemberRole.ROLE_ADMIN) {
+      throw new ForbiddenException('Admin access required');
     }
   }
 
