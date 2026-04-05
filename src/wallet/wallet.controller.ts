@@ -1,7 +1,16 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOperation,
   ApiResponse,
   ApiTags,
@@ -11,6 +20,10 @@ import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { WalletService } from './wallet.service';
 import { CoinProductResponseDto } from './dto/coin-product-response.dto';
+import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
+import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
+import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
+import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 
@@ -59,5 +72,72 @@ export class WalletController {
   })
   async getCoinProducts(): Promise<CoinProductResponseDto[]> {
     return this.walletService.getCoinProducts();
+  }
+
+  @Post('coin-shop/v1/orders')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 주문 생성' })
+  @ApiBody({ type: CreateCoinOrderDto })
+  @ApiResponse({
+    status: 201,
+    description: '코인 주문 생성 성공',
+    type: CoinOrderResponseDto,
+  })
+  async createCoinOrder(
+    @GetUser() member: Member,
+    @Body() dto: CreateCoinOrderDto,
+  ): Promise<CoinOrderResponseDto> {
+    return this.walletService.createCoinOrder(member.id, dto);
+  }
+
+  @Post('coin-shop/v1/orders/:id/confirm')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 주문 결제 승인' })
+  @ApiBody({ type: ConfirmCoinOrderDto })
+  @ApiResponse({
+    status: 200,
+    description: '코인 주문 결제 승인 성공',
+    type: CoinOrderResponseDto,
+  })
+  async confirmCoinOrder(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+    @Body() dto: ConfirmCoinOrderDto,
+  ): Promise<CoinOrderResponseDto> {
+    return this.walletService.confirmCoinOrder(member.id, +id, dto);
+  }
+
+  @Get('coin-shop/v1/orders')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '내 코인 주문 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '내 코인 주문 목록 조회 성공',
+    type: CoinOrderPageResponseDto,
+  })
+  async getCoinOrders(
+    @GetUser() member: Member,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<CoinOrderPageResponseDto> {
+    return this.walletService.getCoinOrders(member.id, paginationDto);
+  }
+
+  @Get('coin-shop/v1/orders/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '내 코인 주문 상세 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '내 코인 주문 상세 조회 성공',
+    type: CoinOrderResponseDto,
+  })
+  async getCoinOrder(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<CoinOrderResponseDto> {
+    return this.walletService.getCoinOrder(member.id, +id);
   }
 }
