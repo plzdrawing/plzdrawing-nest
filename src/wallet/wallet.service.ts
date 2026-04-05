@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   Injectable,
   NotFoundException,
@@ -168,12 +169,27 @@ export class WalletService {
       if (dto.amount !== order.amount) {
         throw new BadRequestException('Coin order amount does not match');
       }
+      const existingOrderWithPaymentKey = await orderRepository.findOne({
+        where: { paymentKey: dto.paymentKey },
+      });
+      if (
+        existingOrderWithPaymentKey &&
+        existingOrderWithPaymentKey.id !== order.id
+      ) {
+        throw new BadRequestException('Payment key already used');
+      }
 
       const tossPayment = await this.tossPaymentsService.confirmPayment(
         dto.paymentKey,
         order.orderCode,
         dto.amount,
       );
+      if (!tossPayment || typeof tossPayment.status !== 'string') {
+        throw new BadGatewayException('Invalid Toss payment response');
+      }
+      if (tossPayment.status !== 'DONE') {
+        throw new BadRequestException('Toss payment is not completed');
+      }
       if (tossPayment.orderId !== order.orderCode) {
         throw new BadRequestException('Toss payment order does not match');
       }
@@ -308,6 +324,12 @@ export class WalletService {
         order.paymentKey,
         dto.cancelReason,
       );
+      if (!canceledPayment || typeof canceledPayment.status !== 'string') {
+        throw new BadGatewayException('Invalid Toss cancel response');
+      }
+      if (canceledPayment.status !== 'CANCELED') {
+        throw new BadRequestException('Toss payment is not cancelled');
+      }
       if (canceledPayment.orderId !== order.orderCode) {
         throw new BadRequestException('Toss cancel order does not match');
       }
@@ -344,6 +366,10 @@ export class WalletService {
   }
 
   async handleTossWebhook(payload: TossWebhookDto): Promise<void> {
+    if (payload.eventType && payload.eventType !== 'PAYMENT_STATUS_CHANGED') {
+      return;
+    }
+
     const orderId =
       typeof payload.data?.orderId === 'string' ? payload.data.orderId : null;
     const status =
@@ -351,6 +377,10 @@ export class WalletService {
     const paymentKey =
       typeof payload.data?.paymentKey === 'string'
         ? payload.data.paymentKey
+        : null;
+    const totalAmount =
+      typeof payload.data?.totalAmount === 'number'
+        ? payload.data.totalAmount
         : null;
 
     if (!orderId || !status) {
@@ -364,11 +394,33 @@ export class WalletService {
       return;
     }
 
-    if (
-      order.status === PaymentStatus.PENDING &&
-      ['ABORTED', 'EXPIRED', 'CANCELED'].includes(status)
-    ) {
+    if (totalAmount !== null && totalAmount !== order.amount) {
+      return;
+    }
+
+    if (order.status !== PaymentStatus.PENDING) {
+      return;
+    }
+
+    if (status === 'DONE') {
+      if (paymentKey && order.paymentKey !== paymentKey) {
+        order.paymentKey = paymentKey;
+        await this.coinOrderRepository.save(order);
+      }
+      return;
+    }
+
+    if (status === 'CANCELED') {
       order.status = PaymentStatus.CANCELLED;
+      order.paymentKey = paymentKey ?? order.paymentKey;
+      order.cancelReason = `Toss webhook status: ${status}`;
+      order.cancelledAt = new Date();
+      await this.coinOrderRepository.save(order);
+      return;
+    }
+
+    if (['ABORTED', 'EXPIRED'].includes(status)) {
+      order.status = PaymentStatus.FAILED;
       order.paymentKey = paymentKey ?? order.paymentKey;
       order.cancelReason = `Toss webhook status: ${status}`;
       order.cancelledAt = new Date();
