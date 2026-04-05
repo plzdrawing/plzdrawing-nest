@@ -19,6 +19,7 @@ import { InquiryModule } from './inquiry/inquiry.module';
 import { WalletModule } from './wallet/wallet.module';
 import { WithdrawAccountModule } from './withdraw-account/withdraw-account.module';
 import { WithdrawModule } from './withdraw/withdraw.module';
+import { AppInitModule } from './app-init/app-init.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { WithdrawModule } from './withdraw/withdraw.module';
     WalletModule,
     WithdrawAccountModule,
     WithdrawModule,
+    AppInitModule,
   ],
   controllers: [AppController],
   providers: [AppService],
