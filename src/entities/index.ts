@@ -23,3 +23,4 @@ export * from './terms.entity';
 export * from './wallet.entity';
 export * from './wallet-transaction.entity';
 export * from './coin-product.entity';
+export * from './coin-order.entity';

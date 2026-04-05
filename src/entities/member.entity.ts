@@ -24,6 +24,7 @@ import { Tag } from './tag.entity';
 import { NotificationPreference } from './notification-preference.entity';
 import { Wallet } from './wallet.entity';
 import { WalletTransaction } from './wallet-transaction.entity';
+import { CoinOrder } from './coin-order.entity';
 
 @Entity('member')
 export class Member extends BaseEntity {
@@ -155,4 +156,7 @@ export class Member extends BaseEntity {
     (walletTransaction) => walletTransaction.member,
   )
   walletTransactions: WalletTransaction[];
+
+  @OneToMany(() => CoinOrder, (coinOrder) => coinOrder.member)
+  coinOrders: CoinOrder[];
 }
