@@ -29,6 +29,7 @@ describe('WithdrawAccountService', () => {
     withdrawAccountRepository = {
       find: jest.fn(),
       findOne: jest.fn(),
+      createQueryBuilder: jest.fn(),
       create: jest.fn((data) => data),
       save: jest.fn(async (data) => data),
       update: jest.fn(),
@@ -202,6 +203,42 @@ describe('WithdrawAccountService', () => {
       expect(result.verifiedAt).toBeTruthy();
     });
   });
+
+  describe('findAllForAdmin', () => {
+    it('관리자 필터 조건을 반영해 목록을 조회한다', async () => {
+      const queryBuilder = createQueryBuilderMock([
+        {
+          id: 1,
+          bankCode: '004',
+          bankName: '국민은행',
+          accountHolder: '홍길동',
+          accountNumberMasked: '123456******34',
+          isPrimary: true,
+          status: WithdrawAccountStatus.ACTIVE,
+          verifiedAt: new Date('2026-04-05T00:00:00.000Z'),
+          createdAt: new Date('2026-04-05T00:00:00.000Z'),
+        },
+      ]);
+      withdrawAccountRepository.createQueryBuilder.mockReturnValue(
+        queryBuilder,
+      );
+
+      const result = await service.findAllForAdmin(
+        { role: MemberRole.ROLE_ADMIN } as Member,
+        {
+          bankCode: '004',
+          verified: true,
+          keyword: '홍길동',
+        },
+      );
+
+      expect(withdrawAccountRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'withdrawAccount',
+      );
+      expect(queryBuilder.andWhere).toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+    });
+  });
 });
 
 function encryptAccountNumber(secret: string, accountNumber: string): string {
@@ -214,4 +251,14 @@ function encryptAccountNumber(secret: string, accountNumber: string): string {
   ]);
 
   return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+function createQueryBuilderMock(result: any[]) {
+  return {
+    leftJoin: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(result),
+  };
 }

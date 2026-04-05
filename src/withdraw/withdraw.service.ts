@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import {
   MemberRole,
   WithdrawAccountStatus,
@@ -19,6 +19,7 @@ import { Wallet } from '../entities/wallet.entity';
 import { WalletTransaction } from '../entities/wallet-transaction.entity';
 import { WithdrawAccount } from '../entities/withdraw-account.entity';
 import { WithdrawRequest } from '../entities/withdraw-request.entity';
+import { WithdrawAdminQueryDto } from './dto/withdraw-admin-query.dto';
 import { CreateWithdrawRequestDto } from './dto/create-withdraw-request.dto';
 import { UpdateWithdrawRequestAdminDto } from './dto/update-withdraw-request-admin.dto';
 import { WithdrawPolicyResponseDto } from './dto/withdraw-policy-response.dto';
@@ -187,13 +188,56 @@ export class WithdrawService {
     return this.mapRequest(request);
   }
 
-  async findAllForAdmin(member: Member): Promise<WithdrawRequestResponseDto[]> {
+  async findAllForAdmin(
+    member: Member,
+    query: WithdrawAdminQueryDto,
+  ): Promise<WithdrawRequestResponseDto[]> {
     this.assertAdmin(member);
 
-    const requests = await this.withdrawRequestRepository.find({
-      relations: ['withdrawAccount'],
-      order: { createdAt: 'DESC' },
-    });
+    const queryBuilder = this.withdrawRequestRepository
+      .createQueryBuilder('withdrawRequest')
+      .leftJoinAndSelect('withdrawRequest.withdrawAccount', 'withdrawAccount')
+      .leftJoin('withdrawRequest.member', 'member')
+      .orderBy('withdrawRequest.createdAt', 'DESC');
+
+    if (query.status) {
+      queryBuilder.andWhere('withdrawRequest.status = :status', {
+        status: query.status,
+      });
+    }
+
+    if (query.memberId) {
+      queryBuilder.andWhere('withdrawRequest.memberId = :memberId', {
+        memberId: query.memberId,
+      });
+    }
+
+    if (query.bankCode) {
+      queryBuilder.andWhere('withdrawAccount.bankCode = :bankCode', {
+        bankCode: query.bankCode,
+      });
+    }
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('member.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('withdrawAccount.accountHolder LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('withdrawAccount.accountNumberMasked LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('withdrawAccount.bankName LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const requests = await queryBuilder.getMany();
 
     return requests.map((request) => this.mapRequest(request));
   }

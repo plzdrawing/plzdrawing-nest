@@ -39,6 +39,7 @@ describe('WithdrawService', () => {
     withdrawRequestRepository = {
       find: jest.fn(),
       findOne: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
     walletRepository = {
       findOne: jest.fn(),
@@ -292,4 +293,54 @@ describe('WithdrawService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('findAllForAdmin', () => {
+    it('관리자 필터 조건을 반영해 환전 요청 목록을 조회한다', async () => {
+      const queryBuilder = createQueryBuilderMock([
+        {
+          id: 1,
+          withdrawAccountId: 11,
+          withdrawAccount: {
+            bankName: '국민은행',
+            accountNumberMasked: '123456******34',
+          },
+          coinAmount: 10,
+          cashAmount: 500,
+          feeAmount: 500,
+          status: WithdrawRequestStatus.REQUESTED,
+          reason: null,
+          processedAt: null,
+          createdAt: new Date('2026-04-05T00:00:00.000Z'),
+        },
+      ]);
+      withdrawRequestRepository.createQueryBuilder.mockReturnValue(
+        queryBuilder,
+      );
+
+      const result = await service.findAllForAdmin(
+        { role: MemberRole.ROLE_ADMIN } as Member,
+        {
+          status: WithdrawRequestStatus.REQUESTED,
+          bankCode: '004',
+          keyword: '홍길동',
+        },
+      );
+
+      expect(withdrawRequestRepository.createQueryBuilder).toHaveBeenCalledWith(
+        'withdrawRequest',
+      );
+      expect(queryBuilder.andWhere).toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+    });
+  });
 });
+
+function createQueryBuilderMock(result: any[]) {
+  return {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(result),
+  };
+}

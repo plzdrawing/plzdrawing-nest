@@ -7,12 +7,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as crypto from 'crypto';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { MemberRole, WithdrawAccountStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { WithdrawAccount } from '../entities/withdraw-account.entity';
 import { BankResponseDto } from './dto/bank-response.dto';
 import { CreateWithdrawAccountDto } from './dto/create-withdraw-account.dto';
+import { WithdrawAccountAdminQueryDto } from './dto/withdraw-account-admin-query.dto';
 import { UpdateWithdrawAccountAdminDto } from './dto/update-withdraw-account-admin.dto';
 import { WithdrawAccountResponseDto } from './dto/withdraw-account-response.dto';
 
@@ -163,13 +164,66 @@ export class WithdrawAccountService {
     return count > 0;
   }
 
-  async findAllForAdmin(member: Member): Promise<WithdrawAccountResponseDto[]> {
+  async findAllForAdmin(
+    member: Member,
+    query: WithdrawAccountAdminQueryDto,
+  ): Promise<WithdrawAccountResponseDto[]> {
     this.assertAdmin(member);
 
-    const accounts = await this.withdrawAccountRepository.find({
-      where: { status: WithdrawAccountStatus.ACTIVE },
-      order: { verifiedAt: 'DESC', createdAt: 'DESC' },
+    const queryBuilder = this.withdrawAccountRepository
+      .createQueryBuilder('withdrawAccount')
+      .leftJoin('withdrawAccount.member', 'member')
+      .orderBy('withdrawAccount.verifiedAt', 'DESC')
+      .addOrderBy('withdrawAccount.createdAt', 'DESC');
+
+    queryBuilder.andWhere('withdrawAccount.status = :defaultStatus', {
+      defaultStatus: WithdrawAccountStatus.ACTIVE,
     });
+
+    if (query.status) {
+      queryBuilder.andWhere('withdrawAccount.status = :status', {
+        status: query.status,
+      });
+    }
+
+    if (query.memberId) {
+      queryBuilder.andWhere('withdrawAccount.memberId = :memberId', {
+        memberId: query.memberId,
+      });
+    }
+
+    if (query.bankCode) {
+      queryBuilder.andWhere('withdrawAccount.bankCode = :bankCode', {
+        bankCode: query.bankCode,
+      });
+    }
+
+    if (query.verified === true) {
+      queryBuilder.andWhere('withdrawAccount.verifiedAt IS NOT NULL');
+    } else if (query.verified === false) {
+      queryBuilder.andWhere('withdrawAccount.verifiedAt IS NULL');
+    }
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('member.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('withdrawAccount.accountHolder LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('withdrawAccount.accountNumberMasked LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('withdrawAccount.bankName LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const accounts = await queryBuilder.getMany();
 
     return accounts.map((account) => this.mapAccount(account));
   }

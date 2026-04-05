@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -18,6 +19,7 @@ import {
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateWithdrawRequestDto } from './dto/create-withdraw-request.dto';
+import { WithdrawAdminQueryDto } from './dto/withdraw-admin-query.dto';
 import { UpdateWithdrawRequestAdminDto } from './dto/update-withdraw-request-admin.dto';
 import { WithdrawPolicyResponseDto } from './dto/withdraw-policy-response.dto';
 import { WithdrawRequestResponseDto } from './dto/withdraw-request-response.dto';
@@ -92,8 +94,9 @@ export class WithdrawController {
   })
   async findAllForAdmin(
     @GetUser() member: Member,
+    @Query() query: WithdrawAdminQueryDto,
   ): Promise<WithdrawRequestResponseDto[]> {
-    return this.withdrawService.findAllForAdmin(member);
+    return this.withdrawService.findAllForAdmin(member, query);
   }
 
   @Patch('v1/admin/requests/:id')
