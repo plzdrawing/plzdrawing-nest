@@ -1,98 +1,211 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# PlzDrawing Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS 기반 `plzdrawing` 백엔드입니다.  
+현재 저장소에는 아래 기능이 포함되어 있습니다.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+- 회원/프로필 수정 및 닉네임 검증
+- 설정 홈, 알림 설정, 앱 정보, 약관 조회/관리
+- 공지사항, 1:1 문의, 관리자 운영 API
+- 코인 상품, 코인 주문, 토스 결제 승인/취소/웹훅 처리
+- 지갑/거래원장
+- 환전계좌 등록/관리/관리자 인증
+- 환전 신청/관리자 처리
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## 실행
 
 ```bash
-$ npm install
+pnpm install
+pnpm start:dev
 ```
 
-## Compile and run the project
+빌드 확인:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+pnpm build
 ```
 
-## Run tests
+테스트 실행:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+pnpm test
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+특정 스펙만 실행할 때:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+./node_modules/.bin/jest --runInBand --watchman=false src/path/to/file.spec.ts
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 환경변수
 
-## Resources
+실제 실행 전에는 `.env.example`을 참고해서 `.env`를 구성하면 됩니다.
 
-Check out a few resources that may come in handy when working with NestJS:
+### 기본 서버
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `PORT`
+- `NODE_ENV`
 
-## Support
+### DB
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- `DB_HOST`
+- `DB_PORT`
+- `DB_USERNAME`
+- `DB_PASSWORD`
+- `DB_DATABASE`
+- `DB_SYNCHRONIZE`
 
-## Stay in touch
+### Redis
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- `REDIS_HOST`
+- `REDIS_PORT`
 
-## License
+### 인증/로그인
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- `SECRET_KEY`
+- `ACCESS_EXPIRATION`
+- `AUTH_CODE_EXPIRATION`
+- `OAUTH_REDIRECT_URL`
+- `MEMBER_REDIRECT_URL`
+- `KAKAO_CLIENT_ID`
+- `KAKAO_CLIENT_SECRET`
+- `KAKAO_REDIRECT_URI`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_CALLBACK_URL`
+
+참고:
+
+- production에서는 `OAUTH_REDIRECT_URL`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `KAKAO_REDIRECT_URI` 누락 시 부팅 단계에서 에러가 납니다.
+
+### 메일
+
+- `MAIL_HOST`
+- `MAIL_PORT`
+- `MAIL_USERNAME`
+- `MAIL_PASSWORD`
+
+### AWS S3
+
+- `AWS_ACCESS_KEY`
+- `AWS_SECRET_KEY`
+- `BUCKET_REGION`
+- `BUCKET_NAME`
+
+### Firebase
+
+- `FIREBASE_CONFIG_PATH`
+
+### 토스 결제
+
+- `TOSS_PAYMENTS_SECRET_KEY`
+- `TOSS_PAYMENTS_API_BASE_URL`
+
+기본값:
+
+- `TOSS_PAYMENTS_API_BASE_URL=https://api.tosspayments.com`
+
+### 환전 정책
+
+- `WITHDRAW_MINIMUM_COIN_AMOUNT`
+- `WITHDRAW_COIN_UNIT`
+- `WITHDRAW_CASH_PER_COIN`
+- `WITHDRAW_FLAT_FEE_AMOUNT`
+- `WITHDRAW_ACCOUNT_SECRET`
+
+기본값:
+
+- `WITHDRAW_MINIMUM_COIN_AMOUNT=10`
+- `WITHDRAW_COIN_UNIT=10`
+- `WITHDRAW_CASH_PER_COIN=100`
+- `WITHDRAW_FLAT_FEE_AMOUNT=0`
+- `WITHDRAW_ACCOUNT_SECRET=plzdrawing-withdraw-account-secret`
+
+### 앱 정보
+
+- `APP_VERSION`
+- `MIN_SUPPORTED_VERSION`
+- `SUPPORT_EMAIL`
+- `SUPPORT_HOURS`
+- `PRIVACY_POLICY_URL`
+
+참고:
+
+- `APP_VERSION`은 현재 배포 버전 값으로 사용됩니다.
+- `MIN_SUPPORTED_VERSION`, `SUPPORT_EMAIL`, `SUPPORT_HOURS`, `PRIVACY_POLICY_URL`는 DB 저장값이 있으면 DB 값을 우선 사용합니다.
+
+### 시드
+
+- `SEED_DEFAULT_DATA`
+- `SEED_ADMIN_ID`
+
+동작:
+
+- `SEED_DEFAULT_DATA=false` 이면 기본 시드를 실행하지 않습니다.
+- 코인 상품은 누락된 기본 상품만 자동 생성합니다.
+- 약관은 `SEED_ADMIN_ID`가 있고 해당 관리자 회원이 존재할 때만 누락분을 생성합니다.
+
+## 기본 시드
+
+앱 부팅 시 아래 초기 데이터가 자동으로 보강될 수 있습니다.
+
+- 코인 상품
+  - `10 / 30 / 50 / 100` 코인 기본 상품
+- 약관
+  - 서비스 이용약관
+  - 개인정보 처리방침
+
+## 주요 운영 API
+
+### 설정/운영
+
+- `GET /api/settings/v1/summary`
+- `GET /api/settings/v1/notifications`
+- `PATCH /api/settings/v1/notifications`
+- `GET /api/settings/v1/app-info`
+- `PATCH /api/settings/v1/admin/app-info`
+- `GET /api/terms/v1`
+- `POST /api/terms/v1`
+- `PATCH /api/terms/v1/:id`
+- `DELETE /api/terms/v1/:id`
+
+### 공지/문의
+
+- `GET /api/notice/v1`
+- `GET /api/notice/v1/admin`
+- `POST /api/notice/v1`
+- `PATCH /api/notice/v1/:id`
+- `DELETE /api/notice/v1/:id`
+- `POST /api/inquiry/v1`
+- `GET /api/inquiry/v1/admin`
+- `GET /api/inquiry/v1/admin/:id`
+- `PATCH /api/inquiry/v1/admin/:id`
+
+### 코인/지갑
+
+- `GET /api/coin-shop/v1/products`
+- `GET /api/coin-shop/v1/admin/products`
+- `POST /api/coin-shop/v1/admin/products`
+- `PATCH /api/coin-shop/v1/admin/products/:id`
+- `POST /api/coin-shop/v1/orders`
+- `POST /api/coin-shop/v1/orders/:id/confirm`
+- `POST /api/coin-shop/v1/orders/:id/cancel`
+- `GET /api/coin-shop/v1/admin/orders`
+- `GET /api/coin-shop/v1/admin/orders/:id`
+- `POST /api/payments/v1/webhooks/toss`
+
+### 환전
+
+- `GET /api/withdraw/v1/policy`
+- `POST /api/withdraw/v1/requests`
+- `GET /api/withdraw/v1/admin/requests`
+- `GET /api/withdraw/v1/admin/requests/:id`
+- `PATCH /api/withdraw/v1/admin/requests/:id`
+- `GET /api/withdraw-accounts/v1/admin`
+- `GET /api/withdraw-accounts/v1/admin/:id`
+- `PATCH /api/withdraw-accounts/v1/admin/:id/verify`
+
+## 운영 메모
+
+- 현재 DB 연결은 `TypeORM synchronize` 기반입니다.
+- 운영 환경에서는 마이그레이션 기반으로 전환하는 것을 권장합니다.
+- `.env`에는 실제 비밀값을 직접 커밋하지 않는 것을 권장합니다.
