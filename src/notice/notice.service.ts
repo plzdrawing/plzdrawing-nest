@@ -4,11 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { MemberRole } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { Notice } from '../entities/notice.entity';
 import { CreateNoticeDto } from './dto/create-notice.dto';
+import { NoticeAdminQueryDto } from './dto/notice-admin-query.dto';
 import { NoticeResponseDto } from './dto/notice-response.dto';
 import { UpdateNoticeDto } from './dto/update-notice.dto';
 
@@ -30,9 +31,43 @@ export class NoticeService {
           notice.id,
           notice.title,
           notice.content,
+          notice.admin?.id ?? notice.adminId ?? null,
+          notice.admin?.nickname ?? null,
+          notice.admin?.email ?? null,
+          notice.admin?.profile?.profileUrl ?? null,
           notice.createdAt,
         ),
     );
+  }
+
+  async findAllForAdmin(
+    member: Member,
+    query: NoticeAdminQueryDto,
+  ): Promise<NoticeResponseDto[]> {
+    this.assertAdmin(member);
+
+    const queryBuilder = this.noticeRepository
+      .createQueryBuilder('notice')
+      .leftJoinAndSelect('notice.admin', 'admin')
+      .leftJoinAndSelect('admin.profile', 'profile')
+      .orderBy('notice.createdAt', 'DESC');
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('admin.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('admin.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('notice.title LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('notice.content LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const notices = await queryBuilder.getMany();
+    return notices.map((notice) => this.mapNotice(notice));
   }
 
   async findOne(id: number): Promise<NoticeResponseDto> {
@@ -41,12 +76,7 @@ export class NoticeService {
       throw new NotFoundException('Notice not found');
     }
 
-    return new NoticeResponseDto(
-      notice.id,
-      notice.title,
-      notice.content,
-      notice.createdAt,
-    );
+    return this.mapNotice(notice);
   }
 
   async create(
@@ -111,6 +141,10 @@ export class NoticeService {
       notice.id,
       notice.title,
       notice.content,
+      notice.admin?.id ?? notice.adminId ?? null,
+      notice.admin?.nickname ?? null,
+      notice.admin?.email ?? null,
+      notice.admin?.profile?.profileUrl ?? null,
       notice.createdAt,
     );
   }
