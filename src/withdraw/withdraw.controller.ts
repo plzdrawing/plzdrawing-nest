@@ -99,6 +99,20 @@ export class WithdrawController {
     return this.withdrawService.findAllForAdmin(member, query);
   }
 
+  @Get('v1/admin/requests/:id')
+  @ApiOperation({ summary: '환전 신청 상세 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '환전 신청 상세 조회 성공',
+    type: WithdrawRequestResponseDto,
+  })
+  async findOneForAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<WithdrawRequestResponseDto> {
+    return this.withdrawService.findOneForAdmin(member, +id);
+  }
+
   @Patch('v1/admin/requests/:id')
   @ApiOperation({ summary: '환전 신청 처리 (관리자)' })
   @ApiBody({ type: UpdateWithdrawRequestAdminDto })

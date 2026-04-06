@@ -343,6 +343,42 @@ describe('WithdrawService', () => {
       expect(result[0].memberNickname).toBe('그림좋아');
     });
   });
+
+  describe('findOneForAdmin', () => {
+    it('관리자는 환전 요청 상세를 조회할 수 있다', async () => {
+      withdrawRequestRepository.findOne.mockResolvedValue({
+        id: 1,
+        memberId: 10,
+        withdrawAccountId: 11,
+        withdrawAccount: {
+          bankName: '국민은행',
+          accountNumberMasked: '123456******34',
+        },
+        member: {
+          id: 10,
+          nickname: '그림좋아',
+          email: 'user@example.com',
+          profile: {
+            profileUrl: 'https://cdn.example.com/profile.png',
+          },
+        },
+        coinAmount: 10,
+        cashAmount: 500,
+        feeAmount: 500,
+        status: WithdrawRequestStatus.REQUESTED,
+        reason: null,
+        processedAt: null,
+        createdAt: new Date('2026-04-05T00:00:00.000Z'),
+      });
+
+      const result = await service.findOneForAdmin(
+        { role: MemberRole.ROLE_ADMIN } as Member,
+        1,
+      );
+
+      expect(result.memberNickname).toBe('그림좋아');
+    });
+  });
 });
 
 function createQueryBuilderMock(result: any[]) {

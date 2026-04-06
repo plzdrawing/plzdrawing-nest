@@ -418,6 +418,23 @@ export class WalletService {
     return this.mapCoinOrder(order, order.coinProduct);
   }
 
+  async getCoinOrderForAdmin(
+    member: Member,
+    orderId: number,
+  ): Promise<CoinOrderResponseDto> {
+    this.assertAdmin(member);
+
+    const order = await this.coinOrderRepository.findOne({
+      where: { id: orderId },
+      relations: ['coinProduct', 'member', 'member.profile'],
+    });
+    if (!order) {
+      throw new NotFoundException('Coin order not found');
+    }
+
+    return this.mapCoinOrder(order, order.coinProduct);
+  }
+
   async cancelCoinOrder(
     memberId: number,
     orderId: number,

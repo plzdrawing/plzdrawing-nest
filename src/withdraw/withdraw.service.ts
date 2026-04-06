@@ -243,6 +243,23 @@ export class WithdrawService {
     return requests.map((request) => this.mapRequest(request));
   }
 
+  async findOneForAdmin(
+    member: Member,
+    requestId: number,
+  ): Promise<WithdrawRequestResponseDto> {
+    this.assertAdmin(member);
+
+    const request = await this.withdrawRequestRepository.findOne({
+      where: { id: requestId },
+      relations: ['withdrawAccount', 'member', 'member.profile'],
+    });
+    if (!request) {
+      throw new NotFoundException('Withdraw request not found');
+    }
+
+    return this.mapRequest(request);
+  }
+
   async updateByAdmin(
     member: Member,
     requestId: number,

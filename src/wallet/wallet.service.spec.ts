@@ -198,6 +198,27 @@ describe('WalletService', () => {
     expect(result.data[0].memberNickname).toBe('그림좋아');
   });
 
+  it('관리자는 코인 주문 상세를 조회할 수 있어야 한다', async () => {
+    coinOrderRepository.findOne.mockResolvedValue({
+      ...createPendingOrder(),
+      member: {
+        id: 10,
+        nickname: '그림좋아',
+        email: 'user@example.com',
+        profile: {
+          profileUrl: 'https://cdn.example.com/profile.png',
+        },
+      },
+    });
+
+    const result = await service.getCoinOrderForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      1,
+    );
+
+    expect(result.memberNickname).toBe('그림좋아');
+  });
+
   it('이미 사용한 paymentKey면 결제 승인을 막아야 한다', async () => {
     const order = createPendingOrder();
 

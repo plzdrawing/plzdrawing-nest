@@ -199,6 +199,22 @@ export class WalletController {
     return this.walletService.getCoinOrdersForAdmin(member, query);
   }
 
+  @Get('coin-shop/v1/admin/orders/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 주문 상세 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '코인 주문 상세 조회 성공',
+    type: CoinOrderResponseDto,
+  })
+  async getCoinOrderForAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<CoinOrderResponseDto> {
+    return this.walletService.getCoinOrderForAdmin(member, +id);
+  }
+
   @Get('coin-shop/v1/orders/:id')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
