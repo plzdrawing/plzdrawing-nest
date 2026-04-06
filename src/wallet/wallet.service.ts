@@ -303,7 +303,7 @@ export class WalletService {
       }
 
       wallet.balance += order.coinAmount;
-      const savedWallet = await walletRepository.save(wallet);
+      await walletRepository.save(wallet);
 
       order.status = PaymentStatus.COMPLETED;
       order.paymentKey = tossPayment.paymentKey;

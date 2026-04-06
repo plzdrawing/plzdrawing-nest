@@ -8,10 +8,6 @@ import { JwtService } from '@nestjs/jwt';
 import Redis from 'ioredis';
 import { createHash } from 'crypto';
 
-interface JwtPayloadWithExp {
-  exp?: number;
-}
-
 @Injectable()
 export class AuthTokenBlacklistService {
   constructor(

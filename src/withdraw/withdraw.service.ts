@@ -30,14 +30,8 @@ export class WithdrawService {
   constructor(
     @InjectRepository(Member)
     private readonly memberRepository: Repository<Member>,
-    @InjectRepository(WithdrawAccount)
-    private readonly withdrawAccountRepository: Repository<WithdrawAccount>,
     @InjectRepository(WithdrawRequest)
     private readonly withdrawRequestRepository: Repository<WithdrawRequest>,
-    @InjectRepository(Wallet)
-    private readonly walletRepository: Repository<Wallet>,
-    @InjectRepository(WalletTransaction)
-    private readonly walletTransactionRepository: Repository<WalletTransaction>,
     private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
   ) {}

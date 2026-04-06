@@ -31,8 +31,6 @@ export class PostService {
   constructor(
     @InjectRepository(Post)
     private readonly postRepository: Repository<Post>,
-    @InjectRepository(PostImage)
-    private readonly postImageRepository: Repository<PostImage>,
     private readonly awsService: AwsService,
     private readonly tagService: TagService,
     private readonly likeService: LikeService,
