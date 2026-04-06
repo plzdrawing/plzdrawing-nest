@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -19,6 +20,7 @@ import {
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateTermDto } from './dto/create-term.dto';
+import { TermAdminQueryDto } from './dto/term-admin-query.dto';
 import { TermResponseDto } from './dto/term-response.dto';
 import { UpdateTermDto } from './dto/update-term.dto';
 import { SettingsService } from './settings.service';
@@ -37,6 +39,38 @@ export class TermsController {
   })
   async getTerms(): Promise<TermResponseDto[]> {
     return this.settingsService.getTerms();
+  }
+
+  @Get('v1/admin')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '약관 목록 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '약관 목록 조회 성공',
+    type: [TermResponseDto],
+  })
+  async getTermsForAdmin(
+    @GetUser() member: Member,
+    @Query() query: TermAdminQueryDto,
+  ): Promise<TermResponseDto[]> {
+    return this.settingsService.getTermsForAdmin(member, query);
+  }
+
+  @Get('v1/admin/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '약관 상세 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '약관 상세 조회 성공',
+    type: TermResponseDto,
+  })
+  async getTermForAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<TermResponseDto> {
+    return this.settingsService.getTermForAdmin(member, +id);
   }
 
   @Post('v1')

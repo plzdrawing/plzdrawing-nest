@@ -39,6 +39,7 @@ describe('SettingsService', () => {
     termsRepository = {
       find: jest.fn(),
       findOne: jest.fn(),
+      createQueryBuilder: jest.fn(),
       create: jest.fn((data) => data),
       save: jest.fn(async (data) => data),
       remove: jest.fn(async (data) => data),
@@ -166,4 +167,70 @@ describe('SettingsService', () => {
     expect(result.minimumSupportedVersion).toBe('1.1.0');
     expect(result.supportEmail).toBe('help@plzdrawing.com');
   });
+
+  it('관리자는 필터 조건으로 약관 목록을 조회할 수 있어야 한다', async () => {
+    const queryBuilder = createQueryBuilderMock([
+      {
+        id: 1,
+        title: '서비스 이용약관',
+        version: '1.0.0',
+        content: '약관 본문',
+        adminId: 10,
+        admin: {
+          id: 10,
+          nickname: '관리자',
+          email: 'admin@example.com',
+          profile: {
+            profileUrl: 'https://cdn.example.com/admin.png',
+          },
+        },
+        createdAt: new Date('2026-04-06T00:00:00.000Z'),
+      },
+    ]);
+    termsRepository.createQueryBuilder.mockReturnValue(queryBuilder);
+
+    const result = await service.getTermsForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      { keyword: '이용약관' },
+    );
+
+    expect(termsRepository.createQueryBuilder).toHaveBeenCalledWith('terms');
+    expect(queryBuilder.andWhere).toHaveBeenCalled();
+    expect(result[0].adminNickname).toBe('관리자');
+  });
+
+  it('관리자는 약관 상세를 조회할 수 있어야 한다', async () => {
+    termsRepository.findOne.mockResolvedValue({
+      id: 1,
+      title: '서비스 이용약관',
+      version: '1.0.0',
+      content: '약관 본문',
+      adminId: 10,
+      admin: {
+        id: 10,
+        nickname: '관리자',
+        email: 'admin@example.com',
+        profile: {
+          profileUrl: 'https://cdn.example.com/admin.png',
+        },
+      },
+      createdAt: new Date('2026-04-06T00:00:00.000Z'),
+    });
+
+    const result = await service.getTermForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      1,
+    );
+
+    expect(result.adminNickname).toBe('관리자');
+  });
 });
+
+function createQueryBuilderMock(result: any[]) {
+  return {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(result),
+  };
+}
