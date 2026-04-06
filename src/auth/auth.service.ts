@@ -53,6 +53,10 @@ export class AuthService {
     });
   }
 
+  logout(): { success: boolean } {
+    return { success: true };
+  }
+
   async oAuthLogin(user: OAuthUser): Promise<{ access_token: string }> {
     if (!user.email) {
       throw new UnauthorizedException(

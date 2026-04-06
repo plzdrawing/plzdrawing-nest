@@ -123,6 +123,12 @@ describe('AuthService', () => {
     });
   });
 
+  describe('logout', () => {
+    it('성공 응답을 반환한다', () => {
+      expect(service.logout()).toEqual({ success: true });
+    });
+  });
+
   describe('oAuthLogin', () => {
     it('소셜 계정 이메일이 없으면 UnauthorizedException을 던진다', async () => {
       await expect(
