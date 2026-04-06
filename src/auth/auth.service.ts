@@ -71,6 +71,10 @@ export class AuthService {
 
     let member = await this.memberService.findByEmail(user.email);
 
+    if (member && (member.status !== MemberStatus.ACTIVE || member.isDeleted)) {
+      throw new UnauthorizedException('Inactive member cannot log in');
+    }
+
     if (!member) {
       member = await this.memberService.create({
         email: user.email,

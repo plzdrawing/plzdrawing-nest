@@ -177,6 +177,8 @@ describe('AuthService', () => {
         id: 10,
         email: 'k@test.com',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       };
       mockMemberService.findByEmail.mockResolvedValue(member);
       mockJwtService.sign.mockReturnValue('oauth-token');
@@ -194,6 +196,40 @@ describe('AuthService', () => {
         role: MemberRole.ROLE_MEMBER,
       });
       expect(result).toEqual({ access_token: 'oauth-token' });
+    });
+
+    it('비활성 기존 회원이면 UnauthorizedException을 던진다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 10,
+        email: 'inactive-social@test.com',
+        role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.INACTIVE,
+        isDeleted: false,
+      });
+
+      await expect(
+        service.oAuthLogin({
+          email: 'inactive-social@test.com',
+          provider: 'kakao',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('삭제 기존 회원이면 UnauthorizedException을 던진다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 10,
+        email: 'deleted-social@test.com',
+        role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: true,
+      });
+
+      await expect(
+        service.oAuthLogin({
+          email: 'deleted-social@test.com',
+          provider: 'google',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('신규 구글 회원이면 임시회원으로 생성 후 토큰 발급한다', async () => {
