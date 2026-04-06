@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { MemberService } from '../member/member.service';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { MemberProvider, MemberRole } from '../common/enums';
+import { MemberProvider, MemberRole, MemberStatus } from '../common/enums';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -49,6 +49,8 @@ describe('AuthService', () => {
         email: 'a@test.com',
         password: 'hashed',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       } as any;
       mockMemberService.findByEmail.mockResolvedValue(member);
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -60,6 +62,8 @@ describe('AuthService', () => {
         id: 1,
         email: 'a@test.com',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       });
       expect((result as any).password).toBeUndefined();
     });
@@ -77,11 +81,41 @@ describe('AuthService', () => {
         id: 1,
         email: 'a@test.com',
         password: 'hashed',
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       });
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
 
       await expect(
         service.validateUser('a@test.com', 'wrong'),
+      ).resolves.toBeNull();
+    });
+
+    it('비활성 회원이면 null을 반환한다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 1,
+        email: 'inactive@test.com',
+        password: 'hashed',
+        status: MemberStatus.INACTIVE,
+        isDeleted: false,
+      });
+
+      await expect(
+        service.validateUser('inactive@test.com', 'plain'),
+      ).resolves.toBeNull();
+    });
+
+    it('삭제 회원이면 null을 반환한다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 1,
+        email: 'deleted@test.com',
+        password: 'hashed',
+        status: MemberStatus.ACTIVE,
+        isDeleted: true,
+      });
+
+      await expect(
+        service.validateUser('deleted@test.com', 'plain'),
       ).resolves.toBeNull();
     });
   });

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { MemberService } from '../member/member.service';
+import { MemberStatus } from '../common/enums';
 
 interface JwtPayload {
   sub: number;
@@ -24,7 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     const { sub: id } = payload;
     const member = await this.memberService.findById(id);
-    if (!member) {
+    if (!member || member.status !== MemberStatus.ACTIVE || member.isDeleted) {
       throw new UnauthorizedException();
     }
     return member;

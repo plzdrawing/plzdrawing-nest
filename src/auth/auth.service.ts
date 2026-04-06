@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { MemberService } from '../member/member.service';
 import { Member } from '../entities/member.entity';
-import { MemberProvider, MemberRole } from '../common/enums';
+import { MemberProvider, MemberRole, MemberStatus } from '../common/enums';
 
 export type AuthenticatedMember = Omit<Member, 'password'>;
 
@@ -26,7 +26,12 @@ export class AuthService {
     pass: string,
   ): Promise<AuthenticatedMember | null> {
     const member = await this.memberService.findByEmail(email);
-    if (member && (await bcrypt.compare(pass, member.password))) {
+    if (
+      member &&
+      member.status === MemberStatus.ACTIVE &&
+      !member.isDeleted &&
+      (await bcrypt.compare(pass, member.password))
+    ) {
       const memberWithoutPassword = { ...member } as Partial<Member>;
       delete memberWithoutPassword.password;
       return memberWithoutPassword as AuthenticatedMember;

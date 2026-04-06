@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
+import { MemberStatus } from '../common/enums';
 
 describe('JwtStrategy', () => {
   const mockConfigService = {
@@ -28,7 +29,12 @@ describe('JwtStrategy', () => {
       mockConfigService as any,
       mockMemberService as any,
     );
-    const member = { id: 1, email: 'a@test.com' };
+    const member = {
+      id: 1,
+      email: 'a@test.com',
+      status: MemberStatus.ACTIVE,
+      isDeleted: false,
+    };
     mockMemberService.findById.mockResolvedValue(member);
 
     await expect(strategy.validate({ sub: 1 })).resolves.toBe(member);
@@ -43,6 +49,38 @@ describe('JwtStrategy', () => {
     mockMemberService.findById.mockResolvedValue(null);
 
     await expect(strategy.validate({ sub: 999 })).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('validate는 비활성 회원이면 UnauthorizedException을 던진다', async () => {
+    const strategy = new JwtStrategy(
+      mockConfigService as any,
+      mockMemberService as any,
+    );
+    mockMemberService.findById.mockResolvedValue({
+      id: 1,
+      status: MemberStatus.INACTIVE,
+      isDeleted: false,
+    });
+
+    await expect(strategy.validate({ sub: 1 })).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('validate는 삭제 회원이면 UnauthorizedException을 던진다', async () => {
+    const strategy = new JwtStrategy(
+      mockConfigService as any,
+      mockMemberService as any,
+    );
+    mockMemberService.findById.mockResolvedValue({
+      id: 1,
+      status: MemberStatus.ACTIVE,
+      isDeleted: true,
+    });
+
+    await expect(strategy.validate({ sub: 1 })).rejects.toThrow(
       UnauthorizedException,
     );
   });
