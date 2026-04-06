@@ -1,17 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TagStatus } from '../common/enums';
+import { MemberRole, TagStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
 import { Terms } from '../entities/terms.entity';
 import { Wallet } from '../entities/wallet.entity';
 import { WithdrawAccountService } from '../withdraw-account/withdraw-account.service';
 import { AppInfoResponseDto } from './dto/app-info-response.dto';
+import { CreateTermDto } from './dto/create-term.dto';
 import { NotificationPreferenceResponseDto } from './dto/notification-preference-response.dto';
 import { SettingsSummaryResponseDto } from './dto/settings-summary-response.dto';
 import { TermResponseDto } from './dto/term-response.dto';
+import { UpdateTermDto } from './dto/update-term.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 
 @Injectable()
@@ -121,6 +127,65 @@ export class SettingsService {
     );
   }
 
+  async createTerm(
+    member: Member,
+    dto: CreateTermDto,
+  ): Promise<TermResponseDto> {
+    this.assertAdmin(member);
+
+    const term = await this.termsRepository.save(
+      this.termsRepository.create({
+        adminId: member.id,
+        title: dto.title.trim(),
+        version: dto.version.trim(),
+        content: dto.content.trim(),
+      }),
+    );
+
+    return this.mapTerm(term);
+  }
+
+  async updateTerm(
+    member: Member,
+    termId: number,
+    dto: UpdateTermDto,
+  ): Promise<TermResponseDto> {
+    this.assertAdmin(member);
+
+    const term = await this.termsRepository.findOne({
+      where: { id: termId },
+    });
+    if (!term) {
+      throw new NotFoundException('Term not found');
+    }
+
+    if (dto.title !== undefined) {
+      term.title = dto.title.trim();
+    }
+    if (dto.version !== undefined) {
+      term.version = dto.version.trim();
+    }
+    if (dto.content !== undefined) {
+      term.content = dto.content.trim();
+    }
+
+    const savedTerm = await this.termsRepository.save(term);
+    return this.mapTerm(savedTerm);
+  }
+
+  async removeTerm(member: Member, termId: number): Promise<void> {
+    this.assertAdmin(member);
+
+    const term = await this.termsRepository.findOne({
+      where: { id: termId },
+    });
+    if (!term) {
+      throw new NotFoundException('Term not found');
+    }
+
+    await this.termsRepository.remove(term);
+  }
+
   private async getOrCreateNotificationPreference(
     memberId: number,
   ): Promise<NotificationPreference> {
@@ -159,5 +224,21 @@ export class SettingsService {
       preference.paymentEnabled,
       preference.marketingEnabled,
     );
+  }
+
+  private mapTerm(term: Terms): TermResponseDto {
+    return new TermResponseDto(
+      term.id,
+      term.title,
+      term.version,
+      term.content,
+      term.createdAt,
+    );
+  }
+
+  private assertAdmin(member: Member): void {
+    if (member.role !== MemberRole.ROLE_ADMIN) {
+      throw new ForbiddenException('Admin access required');
+    }
   }
 }
