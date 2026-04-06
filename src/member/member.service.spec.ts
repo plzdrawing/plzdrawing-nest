@@ -6,7 +6,6 @@ import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
-import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
 import {
   BadRequestException,
   ConflictException,
@@ -18,7 +17,6 @@ import {
   ReviewStar,
   TagStatus,
 } from '../common/enums';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('MemberService', () => {

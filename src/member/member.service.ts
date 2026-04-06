@@ -150,10 +150,8 @@ export class MemberService {
     await this.profileRepository.save(profile);
 
     const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
-    if (normalizedHashTags) {
+    if (normalizedHashTags !== undefined) {
       await this.tagService.syncMemberTags(member, normalizedHashTags);
-    if (dto.hashTag !== undefined) {
-      await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
     if (member.role === MemberRole.ROLE_TEMP) {
@@ -215,10 +213,8 @@ export class MemberService {
     await this.profileRepository.save(profile);
 
     const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
-    if (normalizedHashTags) {
+    if (normalizedHashTags !== undefined) {
       await this.tagService.syncMemberTags(member, normalizedHashTags);
-    if (dto.hashTag !== undefined) {
-      await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
     return true;

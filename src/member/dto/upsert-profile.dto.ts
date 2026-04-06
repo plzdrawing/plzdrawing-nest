@@ -8,7 +8,6 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { PROFILE_HASH_TAG_REGEX } from './profile-hash-tag.constant';
 
 const parseHashTagArray = (value: unknown): unknown => {
   if (value === undefined || value === null) {
@@ -17,7 +16,9 @@ const parseHashTagArray = (value: unknown): unknown => {
 
   if (Array.isArray(value)) {
     return value
-      .map((item) => (typeof item === 'string' ? item.trim() : item))
+      .map((item) =>
+        typeof item === 'string' ? item.trim().replace(/^#/, '') : item,
+      )
       .filter((item) => item !== '');
   }
 
@@ -35,7 +36,9 @@ const parseHashTagArray = (value: unknown): unknown => {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
         return parsed
-          .map((item) => (typeof item === 'string' ? item.trim() : item))
+          .map((item) =>
+            typeof item === 'string' ? item.trim().replace(/^#/, '') : item,
+          )
           .filter((item) => item !== '');
       }
     } catch {
@@ -45,7 +48,7 @@ const parseHashTagArray = (value: unknown): unknown => {
 
   return trimmed
     .split(',')
-    .map((item) => item.trim())
+    .map((item) => item.trim().replace(/^#/, ''))
     .filter((item) => item !== '');
 };
 
@@ -59,23 +62,7 @@ export class UpsertProfileDto {
   introduce?: string;
 
   @ApiPropertyOptional({
-    description: '관심 태그 목록',
-    example: ['그림', '일러스트'],
-  })
-  @Transform(({ value }) => {
-    if (typeof value === 'string') {
-      return value
-        .split(',')
-        .map((v) => v.trim().replace(/^#/, ''))
-        .filter(Boolean);
-    }
-    if (Array.isArray(value)) {
-      return value
-        .map((v) => (typeof v === 'string' ? v.trim().replace(/^#/, '') : v))
-        .filter(Boolean);
-    }
-    return value;
-    description: '관심 태그 목록 (최대 5개, #문자열, 공백 없음)',
+    description: '관심 태그 목록 (최대 5개)',
     example: ['#누사', '#귀여운', '#동물그림'],
   })
   @Transform(({ value }) => parseHashTagArray(value))
@@ -88,10 +75,6 @@ export class UpsertProfileDto {
     each: true,
     message:
       'each hashtag must contain only Korean, English letters, and numbers',
-  @Matches(PROFILE_HASH_TAG_REGEX, {
-    each: true,
-    message:
-      '각 해시태그는 #으로 시작하고 한글/영문/숫자 10자 이하여야 합니다.',
   })
   hashTag?: string[];
 }
