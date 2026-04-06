@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { Brackets } from 'typeorm';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   PaymentMethod,
@@ -23,6 +24,7 @@ import { Wallet } from '../entities/wallet.entity';
 import { CoinProductResponseDto } from './dto/coin-product-response.dto';
 import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
+import { CoinOrderAdminQueryDto } from './dto/coin-order-admin-query.dto';
 import { CancelCoinOrderDto } from './dto/cancel-coin-order.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
 import { CreateCoinProductDto } from './dto/create-coin-product.dto';
@@ -341,6 +343,66 @@ export class WalletService {
     };
   }
 
+  async getCoinOrdersForAdmin(
+    member: Member,
+    query: CoinOrderAdminQueryDto,
+  ): Promise<CoinOrderPageResponseDto> {
+    this.assertAdmin(member);
+
+    const { page = 1, limit = 10 } = query;
+    const queryBuilder = this.coinOrderRepository
+      .createQueryBuilder('coinOrder')
+      .leftJoinAndSelect('coinOrder.coinProduct', 'coinProduct')
+      .leftJoinAndSelect('coinOrder.member', 'member')
+      .leftJoinAndSelect('member.profile', 'profile')
+      .orderBy('coinOrder.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (query.status) {
+      queryBuilder.andWhere('coinOrder.status = :status', {
+        status: query.status,
+      });
+    }
+
+    if (query.paymentMethod) {
+      queryBuilder.andWhere('coinOrder.paymentMethod = :paymentMethod', {
+        paymentMethod: query.paymentMethod,
+      });
+    }
+
+    if (query.memberId) {
+      queryBuilder.andWhere('coinOrder.memberId = :memberId', {
+        memberId: query.memberId,
+      });
+    }
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('member.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('coinOrder.orderCode LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            })
+            .orWhere('coinProduct.name LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const [orders, total] = await queryBuilder.getManyAndCount();
+
+    return {
+      data: orders.map((order) => this.mapCoinOrder(order, order.coinProduct)),
+      total,
+      page,
+      limit,
+    };
+  }
+
   async getCoinOrder(
     memberId: number,
     orderId: number,
@@ -580,6 +642,10 @@ export class WalletService {
       order.paymentKey ?? null,
       order.approvedAt ?? null,
       order.cancelReason ?? null,
+      order.member?.id ?? order.memberId ?? null,
+      order.member?.nickname ?? null,
+      order.member?.email ?? null,
+      order.member?.profile?.profileUrl ?? null,
       order.cancelledAt ?? null,
       order.createdAt,
     );

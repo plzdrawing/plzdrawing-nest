@@ -37,6 +37,7 @@ describe('WalletService', () => {
   const coinOrderRepository = {
     findOne: jest.fn(),
     findAndCount: jest.fn(),
+    createQueryBuilder: jest.fn(),
     save: jest.fn(),
     create: jest.fn((data) => data),
   };
@@ -161,6 +162,40 @@ describe('WalletService', () => {
         coinAmount: 30,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('관리자 필터 조건을 반영해 코인 주문 목록을 조회한다', async () => {
+    const queryBuilder = createQueryBuilderMock([
+      {
+        ...createPendingOrder(),
+        member: {
+          id: 10,
+          nickname: '그림좋아',
+          email: 'user@example.com',
+          profile: {
+            profileUrl: 'https://cdn.example.com/profile.png',
+          },
+        },
+      },
+    ]);
+    coinOrderRepository.createQueryBuilder.mockReturnValue(queryBuilder);
+
+    const result = await service.getCoinOrdersForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      {
+        page: 1,
+        limit: 10,
+        status: PaymentStatus.PENDING,
+        paymentMethod: PaymentMethod.TOSS_PAY,
+        keyword: 'coin-order',
+      },
+    );
+
+    expect(coinOrderRepository.createQueryBuilder).toHaveBeenCalledWith(
+      'coinOrder',
+    );
+    expect(queryBuilder.andWhere).toHaveBeenCalled();
+    expect(result.data[0].memberNickname).toBe('그림좋아');
   });
 
   it('이미 사용한 paymentKey면 결제 승인을 막아야 한다', async () => {
@@ -341,5 +376,16 @@ function createCompletedOrder(): CoinOrder {
     status: PaymentStatus.COMPLETED,
     paymentKey: 'payment-key',
     approvedAt: new Date(),
+  };
+}
+
+function createQueryBuilderMock(result: any[]) {
+  return {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn().mockResolvedValue([result, result.length]),
   };
 }

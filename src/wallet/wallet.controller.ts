@@ -26,6 +26,7 @@ import { CancelCoinOrderDto } from './dto/cancel-coin-order.dto';
 import { CoinProductResponseDto } from './dto/coin-product-response.dto';
 import { CoinOrderPageResponseDto } from './dto/coin-order-page-response.dto';
 import { CoinOrderResponseDto } from './dto/coin-order-response.dto';
+import { CoinOrderAdminQueryDto } from './dto/coin-order-admin-query.dto';
 import { ConfirmCoinOrderDto } from './dto/confirm-coin-order.dto';
 import { CreateCoinProductDto } from './dto/create-coin-product.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
@@ -180,6 +181,22 @@ export class WalletController {
     @Query() paginationDto: PaginationDto,
   ): Promise<CoinOrderPageResponseDto> {
     return this.walletService.getCoinOrders(member.id, paginationDto);
+  }
+
+  @Get('coin-shop/v1/admin/orders')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 주문 목록 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '코인 주문 목록 조회 성공',
+    type: CoinOrderPageResponseDto,
+  })
+  async getCoinOrdersForAdmin(
+    @GetUser() member: Member,
+    @Query() query: CoinOrderAdminQueryDto,
+  ): Promise<CoinOrderPageResponseDto> {
+    return this.walletService.getCoinOrdersForAdmin(member, query);
   }
 
   @Get('coin-shop/v1/orders/:id')
