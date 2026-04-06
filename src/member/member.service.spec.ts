@@ -288,14 +288,22 @@ describe('MemberService', () => {
       await expect(service.withdraw(1)).rejects.toThrow(NotFoundException);
     });
 
-    it('회원 상태를 INACTIVE + 삭제 처리한다', async () => {
-      const member = { id: 1, status: MemberStatus.ACTIVE, isDeleted: false };
+    it('회원 상태를 INACTIVE + 삭제 처리하고 식별값을 정리한다', async () => {
+      const member = {
+        id: 1,
+        email: 'user@test.com',
+        nickname: 'nick',
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
+      };
       memberRepository.findOne.mockResolvedValue(member);
 
       await service.withdraw(1);
 
       expect(member.status).toBe(MemberStatus.INACTIVE);
       expect(member.isDeleted).toBe(true);
+      expect(member.email).toMatch(/^deleted-1-\d+@example\.invalid$/);
+      expect(member.nickname).toMatch(/^deleted-member-1-\d+$/);
       expect(memberRepository.save).toHaveBeenCalledWith(member);
     });
   });

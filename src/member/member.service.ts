@@ -227,8 +227,11 @@ export class MemberService {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Member not found');
 
+    const deletedSuffix = `${member.id}-${Date.now()}`;
     member.status = MemberStatus.INACTIVE;
     member.isDeleted = true;
+    member.email = `deleted-${deletedSuffix}@example.invalid`;
+    member.nickname = `deleted-member-${deletedSuffix}`;
     await this.memberRepository.save(member);
   }
 
