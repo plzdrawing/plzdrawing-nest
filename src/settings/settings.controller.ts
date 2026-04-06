@@ -12,6 +12,7 @@ import { Member } from '../entities/member.entity';
 import { AppInfoResponseDto } from './dto/app-info-response.dto';
 import { NotificationPreferenceResponseDto } from './dto/notification-preference-response.dto';
 import { SettingsSummaryResponseDto } from './dto/settings-summary-response.dto';
+import { UpdateAppInfoDto } from './dto/update-app-info.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { SettingsService } from './settings.service';
 
@@ -74,7 +75,24 @@ export class SettingsController {
     description: '앱 관리 정보 조회 성공',
     type: AppInfoResponseDto,
   })
-  getAppInfo(): AppInfoResponseDto {
+  async getAppInfo(): Promise<AppInfoResponseDto> {
     return this.settingsService.getAppInfo();
+  }
+
+  @Patch('v1/admin/app-info')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '앱 관리 정보 수정 (관리자)' })
+  @ApiBody({ type: UpdateAppInfoDto })
+  @ApiResponse({
+    status: 200,
+    description: '앱 관리 정보 수정 성공',
+    type: AppInfoResponseDto,
+  })
+  async updateAppInfo(
+    @GetUser() member: Member,
+    @Body() dto: UpdateAppInfoDto,
+  ): Promise<AppInfoResponseDto> {
+    return this.settingsService.updateAppInfo(member, dto);
   }
 }

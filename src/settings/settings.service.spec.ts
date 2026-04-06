@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { MemberRole } from '../common/enums';
+import { AppSetting } from '../entities/app-setting.entity';
 import { Member } from '../entities/member.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
 import { Terms } from '../entities/terms.entity';
@@ -13,6 +14,7 @@ import { SettingsService } from './settings.service';
 describe('SettingsService', () => {
   let service: SettingsService;
 
+  let appSettingRepository: any;
   let memberRepository: any;
   let notificationPreferenceRepository: any;
   let termsRepository: any;
@@ -21,6 +23,11 @@ describe('SettingsService', () => {
   let configService: any;
 
   beforeEach(async () => {
+    appSettingRepository = {
+      findOne: jest.fn(),
+      create: jest.fn((data) => data),
+      save: jest.fn(async (data) => data),
+    };
     memberRepository = {
       findOne: jest.fn(),
     };
@@ -49,6 +56,10 @@ describe('SettingsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SettingsService,
+        {
+          provide: getRepositoryToken(AppSetting),
+          useValue: appSettingRepository,
+        },
         {
           provide: getRepositoryToken(Member),
           useValue: memberRepository,
@@ -121,5 +132,38 @@ describe('SettingsService', () => {
         title: '수정된 제목',
       }),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  it('관리자는 앱 정보를 수정할 수 있어야 한다', async () => {
+    appSettingRepository.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        minimumSupportedVersion: '1.1.0',
+        supportEmail: 'help@plzdrawing.com',
+        supportHours: '평일 10:00 - 18:00',
+        privacyPolicyUrl: 'https://example.com/privacy',
+      });
+    configService.get.mockImplementation((key: string) => {
+      const values: Record<string, string> = {
+        APP_VERSION: '1.2.0',
+        MIN_SUPPORTED_VERSION: '1.0.0',
+        SUPPORT_EMAIL: 'support@plzdrawing.com',
+        SUPPORT_HOURS: '평일 10:00 - 18:00',
+        PRIVACY_POLICY_URL: 'https://example.com/privacy',
+      };
+      return values[key];
+    });
+
+    const result = await service.updateAppInfo(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      {
+        minimumSupportedVersion: '1.1.0',
+        supportEmail: 'help@plzdrawing.com',
+      },
+    );
+
+    expect(appSettingRepository.save).toHaveBeenCalled();
+    expect(result.minimumSupportedVersion).toBe('1.1.0');
+    expect(result.supportEmail).toBe('help@plzdrawing.com');
   });
 });

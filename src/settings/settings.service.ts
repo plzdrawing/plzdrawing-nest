@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AppSetting } from '../entities/app-setting.entity';
 import { MemberRole, TagStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { NotificationPreference } from '../entities/notification-preference.entity';
@@ -17,12 +18,15 @@ import { CreateTermDto } from './dto/create-term.dto';
 import { NotificationPreferenceResponseDto } from './dto/notification-preference-response.dto';
 import { SettingsSummaryResponseDto } from './dto/settings-summary-response.dto';
 import { TermResponseDto } from './dto/term-response.dto';
+import { UpdateAppInfoDto } from './dto/update-app-info.dto';
 import { UpdateTermDto } from './dto/update-term.dto';
 import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 
 @Injectable()
 export class SettingsService {
   constructor(
+    @InjectRepository(AppSetting)
+    private readonly appSettingRepository: Repository<AppSetting>,
     @InjectRepository(Member)
     private readonly memberRepository: Repository<Member>,
     @InjectRepository(NotificationPreference)
@@ -99,15 +103,67 @@ export class SettingsService {
     return this.mapNotificationPreference(savedPreference);
   }
 
-  getAppInfo(): AppInfoResponseDto {
+  async getAppInfo(): Promise<AppInfoResponseDto> {
+    const appSetting = await this.appSettingRepository.findOne({
+      order: { createdAt: 'DESC' },
+    });
+
     return new AppInfoResponseDto(
       this.configService.get<string>('APP_VERSION') ?? '0.0.1',
-      this.configService.get<string>('MIN_SUPPORTED_VERSION') ?? '0.0.1',
-      this.configService.get<string>('SUPPORT_EMAIL') ??
+      appSetting?.minimumSupportedVersion ??
+        this.configService.get<string>('MIN_SUPPORTED_VERSION') ??
+        '0.0.1',
+      appSetting?.supportEmail ??
+        this.configService.get<string>('SUPPORT_EMAIL') ??
         'support@plzdrawing.com',
-      this.configService.get<string>('SUPPORT_HOURS') ?? '평일 10:00 - 18:00',
-      this.configService.get<string>('PRIVACY_POLICY_URL') ?? null,
+      appSetting?.supportHours ??
+        this.configService.get<string>('SUPPORT_HOURS') ??
+        '평일 10:00 - 18:00',
+      appSetting?.privacyPolicyUrl ??
+        this.configService.get<string>('PRIVACY_POLICY_URL') ??
+        null,
     );
+  }
+
+  async updateAppInfo(
+    member: Member,
+    dto: UpdateAppInfoDto,
+  ): Promise<AppInfoResponseDto> {
+    this.assertAdmin(member);
+
+    let appSetting = await this.appSettingRepository.findOne({
+      order: { createdAt: 'DESC' },
+    });
+    if (!appSetting) {
+      appSetting = this.appSettingRepository.create({
+        minimumSupportedVersion:
+          this.configService.get<string>('MIN_SUPPORTED_VERSION') ?? '0.0.1',
+        supportEmail:
+          this.configService.get<string>('SUPPORT_EMAIL') ??
+          'support@plzdrawing.com',
+        supportHours:
+          this.configService.get<string>('SUPPORT_HOURS') ??
+          '평일 10:00 - 18:00',
+        privacyPolicyUrl:
+          this.configService.get<string>('PRIVACY_POLICY_URL') ?? null,
+      });
+    }
+
+    if (dto.minimumSupportedVersion !== undefined) {
+      appSetting.minimumSupportedVersion = dto.minimumSupportedVersion.trim();
+    }
+    if (dto.supportEmail !== undefined) {
+      appSetting.supportEmail = dto.supportEmail.trim();
+    }
+    if (dto.supportHours !== undefined) {
+      appSetting.supportHours = dto.supportHours.trim();
+    }
+    if (dto.privacyPolicyUrl !== undefined) {
+      appSetting.privacyPolicyUrl = dto.privacyPolicyUrl?.trim() ?? null;
+    }
+
+    await this.appSettingRepository.save(appSetting);
+    return this.getAppInfo();
   }
 
   async getTerms(): Promise<TermResponseDto[]> {
