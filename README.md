@@ -4,6 +4,7 @@ NestJS 기반 `plzdrawing` 백엔드입니다.
 현재 저장소에는 아래 기능이 포함되어 있습니다.
 
 - 회원/프로필 수정 및 닉네임 검증
+- 일반 로그인, 소셜 로그인, 로그아웃
 - 설정 홈, 알림 설정, 앱 정보, 약관 조회/관리
 - 공지사항, 1:1 문의, 관리자 운영 API
 - 코인 상품, 코인 주문, 토스 결제 승인/취소/웹훅 처리
@@ -168,6 +169,14 @@ pnpm test
 - `PATCH /api/terms/v1/:id`
 - `DELETE /api/terms/v1/:id`
 
+### 인증/회원
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/profile`
+- `DELETE /api/member/v1/withdraw`
+
 ### 공지/문의
 
 - `GET /api/notice/v1`
@@ -209,3 +218,5 @@ pnpm test
 - 현재 DB 연결은 `TypeORM synchronize` 기반입니다.
 - 운영 환경에서는 마이그레이션 기반으로 전환하는 것을 권장합니다.
 - `.env`에는 실제 비밀값을 직접 커밋하지 않는 것을 권장합니다.
+- 로그아웃은 현재 서버 성공 응답 후 프론트에서 access token을 삭제하는 방식입니다.
+- 비활성 또는 탈퇴 회원은 일반 로그인, 소셜 로그인, JWT 인증 모두 차단됩니다.
