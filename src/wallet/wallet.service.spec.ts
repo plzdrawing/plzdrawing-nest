@@ -141,6 +141,26 @@ describe('WalletService', () => {
     expect(result.isActive).toBe(true);
   });
 
+  it('관리자는 코인 상품 상세를 조회할 수 있어야 한다', async () => {
+    coinProductRepository.findOne.mockResolvedValue({
+      id: 10,
+      name: '그리코인 10개',
+      coinAmount: 10,
+      price: 1200,
+      displayOrder: 1,
+      description: null,
+      isActive: true,
+    });
+
+    const result = await service.getCoinProductForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      10,
+    );
+
+    expect(result.id).toBe(10);
+    expect(result.name).toBe('그리코인 10개');
+  });
+
   it('코인 수량이 중복되면 코인 상품 수정을 막아야 한다', async () => {
     coinProductRepository.findOne
       .mockResolvedValueOnce({

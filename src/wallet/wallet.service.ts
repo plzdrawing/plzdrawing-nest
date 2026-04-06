@@ -126,6 +126,22 @@ export class WalletService {
     return products.map((product) => this.mapCoinProduct(product));
   }
 
+  async getCoinProductForAdmin(
+    member: Member,
+    productId: number,
+  ): Promise<CoinProductResponseDto> {
+    this.assertAdmin(member);
+
+    const product = await this.coinProductRepository.findOne({
+      where: { id: productId },
+    });
+    if (!product) {
+      throw new NotFoundException('Coin product not found');
+    }
+
+    return this.mapCoinProduct(product);
+  }
+
   async createCoinProduct(
     member: Member,
     dto: CreateCoinProductDto,

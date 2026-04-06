@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { AppSetting } from '../entities/app-setting.entity';
 import { MemberRole, TagStatus } from '../common/enums';
 import { Member } from '../entities/member.entity';
@@ -17,6 +17,7 @@ import { AppInfoResponseDto } from './dto/app-info-response.dto';
 import { CreateTermDto } from './dto/create-term.dto';
 import { NotificationPreferenceResponseDto } from './dto/notification-preference-response.dto';
 import { SettingsSummaryResponseDto } from './dto/settings-summary-response.dto';
+import { TermAdminQueryDto } from './dto/term-admin-query.dto';
 import { TermResponseDto } from './dto/term-response.dto';
 import { UpdateAppInfoDto } from './dto/update-app-info.dto';
 import { UpdateTermDto } from './dto/update-term.dto';
@@ -168,19 +169,58 @@ export class SettingsService {
 
   async getTerms(): Promise<TermResponseDto[]> {
     const terms = await this.termsRepository.find({
+      relations: ['admin', 'admin.profile'],
       order: { createdAt: 'DESC' },
     });
 
-    return terms.map(
-      (term) =>
-        new TermResponseDto(
-          term.id,
-          term.title,
-          term.version,
-          term.content,
-          term.createdAt,
-        ),
-    );
+    return terms.map((term) => this.mapTerm(term));
+  }
+
+  async getTermsForAdmin(
+    member: Member,
+    query: TermAdminQueryDto,
+  ): Promise<TermResponseDto[]> {
+    this.assertAdmin(member);
+
+    const queryBuilder = this.termsRepository
+      .createQueryBuilder('terms')
+      .leftJoinAndSelect('terms.admin', 'admin')
+      .leftJoinAndSelect('admin.profile', 'profile')
+      .orderBy('terms.createdAt', 'DESC');
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('admin.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('admin.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('terms.title LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('terms.version LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const terms = await queryBuilder.getMany();
+    return terms.map((term) => this.mapTerm(term));
+  }
+
+  async getTermForAdmin(
+    member: Member,
+    termId: number,
+  ): Promise<TermResponseDto> {
+    this.assertAdmin(member);
+
+    const term = await this.termsRepository.findOne({
+      where: { id: termId },
+      relations: ['admin', 'admin.profile'],
+    });
+    if (!term) {
+      throw new NotFoundException('Term not found');
+    }
+
+    return this.mapTerm(term);
   }
 
   async createTerm(
@@ -288,6 +328,10 @@ export class SettingsService {
       term.title,
       term.version,
       term.content,
+      term.admin?.id ?? term.adminId ?? null,
+      term.admin?.nickname ?? null,
+      term.admin?.email ?? null,
+      term.admin?.profile?.profileUrl ?? null,
       term.createdAt,
     );
   }

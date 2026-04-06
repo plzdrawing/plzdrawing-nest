@@ -97,6 +97,22 @@ export class WalletController {
     return this.walletService.getCoinProductsForAdmin(member);
   }
 
+  @Get('coin-shop/v1/admin/products/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '코인 상품 상세 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '코인 상품 상세 조회 성공',
+    type: CoinProductResponseDto,
+  })
+  async getCoinProductForAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<CoinProductResponseDto> {
+    return this.walletService.getCoinProductForAdmin(member, +id);
+  }
+
   @Post('coin-shop/v1/admin/products')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
