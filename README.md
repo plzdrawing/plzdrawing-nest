@@ -25,6 +25,15 @@ pnpm start:dev
 pnpm build
 ```
 
+DB 마이그레이션 관련:
+
+```bash
+pnpm db:migration:show
+pnpm db:migration:generate InitSchema
+pnpm db:migration:run
+pnpm db:migration:revert
+```
+
 테스트 실행:
 
 ```bash
@@ -54,6 +63,7 @@ pnpm test
 - `DB_PASSWORD`
 - `DB_DATABASE`
 - `DB_SYNCHRONIZE`
+- `DB_LOGGING`
 
 ### Redis
 
@@ -216,7 +226,8 @@ pnpm test
 ## 운영 메모
 
 - 현재 DB 연결은 `TypeORM synchronize` 기반입니다.
-- 운영 환경에서는 마이그레이션 기반으로 전환하는 것을 권장합니다.
+- 로컬 개발은 `DB_SYNCHRONIZE=true`로 빠르게 맞출 수 있습니다.
+- 스테이징/운영은 `DB_SYNCHRONIZE=false`로 두고 마이그레이션 실행을 권장합니다.
 - `.env`에는 실제 비밀값을 직접 커밋하지 않는 것을 권장합니다.
 - 로그아웃은 현재 서버 성공 응답 후 프론트에서 access token을 삭제하는 방식입니다.
 - 비활성 또는 탈퇴 회원은 일반 로그인, 소셜 로그인, JWT 인증 모두 차단됩니다.

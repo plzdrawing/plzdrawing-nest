@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -20,6 +20,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { WithdrawAccountModule } from './withdraw-account/withdraw-account.module';
 import { WithdrawModule } from './withdraw/withdraw.module';
 import { AppInitModule } from './app-init/app-init.module';
+import { createTypeOrmOptions } from './database/typeorm.config';
 
 @Module({
   imports: [
@@ -30,19 +31,7 @@ import { AppInitModule } from './app-init/app-init.module';
     ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get<string>('DB_HOST'),
-        port: configService.get<number>('DB_PORT'),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
-        autoLoadEntities: true,
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get<boolean>('DB_SYNCHRONIZE'),
-        logging: true,
-      }),
+      useFactory: () => createTypeOrmOptions(),
     }),
     MemberModule,
     AuthModule,
