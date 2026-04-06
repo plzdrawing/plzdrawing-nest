@@ -6,7 +6,11 @@ import { Profile } from '../entities/profile.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('MemberService', () => {
@@ -71,20 +75,44 @@ describe('MemberService', () => {
   });
 
   it('create는 기본 role/status를 넣어 저장한다', async () => {
+    memberRepository.findOne.mockResolvedValue(null);
     memberRepository.save.mockImplementation(async (v: any) => v);
 
-    const result = await service.create({ email: 'a@test.com' } as any);
+    const result = await service.create({
+      email: 'A@test.com ',
+      nickname: ' nick ',
+    } as any);
 
     expect(memberRepository.create).toHaveBeenCalledWith({
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
       email: 'a@test.com',
+      nickname: 'nick',
     });
     expect(result).toMatchObject({
       email: 'a@test.com',
+      nickname: 'nick',
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
     });
+  });
+
+  it('create는 중복 이메일이면 ConflictException을 던진다', async () => {
+    memberRepository.findOne.mockResolvedValueOnce({ id: 1 });
+
+    await expect(
+      service.create({ email: 'a@test.com' } as any),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('create는 중복 닉네임이면 ConflictException을 던진다', async () => {
+    memberRepository.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 1 });
+
+    await expect(
+      service.create({ email: 'a@test.com', nickname: 'nick' } as any),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('findByEmail/findById/update는 repository에 위임한다', async () => {

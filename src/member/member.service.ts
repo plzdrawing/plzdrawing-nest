@@ -44,10 +44,33 @@ export class MemberService {
   ) {}
 
   async create(data: Partial<Member>): Promise<Member> {
+    const normalizedEmail = data.email?.trim().toLowerCase();
+    const normalizedNickname = data.nickname?.trim();
+
+    if (normalizedEmail) {
+      const existingMemberByEmail = await this.memberRepository.findOne({
+        where: { email: normalizedEmail },
+      });
+      if (existingMemberByEmail) {
+        throw new ConflictException('Email already exists');
+      }
+    }
+
+    if (normalizedNickname) {
+      const existingMemberByNickname = await this.memberRepository.findOne({
+        where: { nickname: normalizedNickname },
+      });
+      if (existingMemberByNickname) {
+        throw new ConflictException('Nickname already exists');
+      }
+    }
+
     const member = this.memberRepository.create({
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
       ...data,
+      email: normalizedEmail ?? data.email,
+      nickname: normalizedNickname ?? data.nickname,
     });
     return await this.memberRepository.save(member);
   }
