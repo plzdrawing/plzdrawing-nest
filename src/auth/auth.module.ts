@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule, type JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { MemberModule } from '../member/member.module';
+import { RedisModule } from '../common/redis/redis.module';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -10,10 +11,12 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { KakaoStrategy } from './strategies/kakao.strategy';
 import { KakaoAuthGuard } from './guards/kakao-auth.guard';
 import { assertRequiredAuthEnv, REQUIRED_AUTH_ENV_KEYS } from './auth-env';
+import { AuthTokenBlacklistService } from './auth-token-blacklist.service';
 
 @Module({
   imports: [
     MemberModule,
+    RedisModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -34,6 +37,7 @@ import { assertRequiredAuthEnv, REQUIRED_AUTH_ENV_KEYS } from './auth-env';
   ],
   providers: [
     AuthService,
+    AuthTokenBlacklistService,
     JwtStrategy,
     GoogleStrategy,
     KakaoStrategy,

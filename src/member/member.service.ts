@@ -3,11 +3,13 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  ConflictException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThan } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as path from 'path';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
 import {
@@ -36,6 +38,17 @@ import { MemberQueryService } from './member-query.service';
 @Injectable()
 export class MemberService {
   private readonly logger = new Logger(MemberService.name);
+  private static readonly PROFILE_IMAGE_MIME_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+  ]);
+  private static readonly PROFILE_IMAGE_EXTENSIONS = new Set([
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+  ]);
 
   constructor(
     @InjectRepository(Member)
@@ -48,16 +61,46 @@ export class MemberService {
   ) {}
 
   async create(data: Partial<Member>): Promise<Member> {
+    const normalizedEmail = data.email?.trim().toLowerCase();
+    const normalizedNickname = data.nickname?.trim();
+
+    if (normalizedEmail) {
+      const existingMemberByEmail = await this.memberRepository.findOne({
+        where: { email: normalizedEmail },
+      });
+      if (existingMemberByEmail) {
+        throw new ConflictException('Email already exists');
+      }
+    }
+
+    if (normalizedNickname) {
+      const existingMemberByNickname = await this.memberRepository.findOne({
+        where: { nickname: normalizedNickname },
+      });
+      if (existingMemberByNickname) {
+        throw new ConflictException('Nickname already exists');
+      }
+    }
+
     const member = this.memberRepository.create({
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
       ...data,
+      email: normalizedEmail ?? data.email,
+      nickname: normalizedNickname ?? data.nickname,
     });
     return await this.memberRepository.save(member);
   }
 
   async findByEmail(email: string): Promise<Member | null> {
-    return await this.memberRepository.findOne({ where: { email } });
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    return await this.memberRepository.findOne({
+      where: { email: normalizedEmail },
+    });
   }
 
   async findById(id: number): Promise<Member | null> {
@@ -76,6 +119,7 @@ export class MemberService {
   ): Promise<boolean> {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Member not found');
+    this.validateProfileImage(file);
 
     let profileUrl = null;
     if (file) {
@@ -105,8 +149,9 @@ export class MemberService {
     }
     await this.profileRepository.save(profile);
 
-    if (dto.hashTag !== undefined) {
-      await this.tagService.syncMemberTags(member, dto.hashTag);
+    const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
+    if (normalizedHashTags !== undefined) {
+      await this.tagService.syncMemberTags(member, normalizedHashTags);
     }
 
     if (member.role === MemberRole.ROLE_TEMP) {
@@ -125,10 +170,19 @@ export class MemberService {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Member not found');
 
-    if (dto.nickname) {
-      member.nickname = dto.nickname;
+    const normalizedNickname = dto.nickname?.trim();
+    if (normalizedNickname) {
+      const duplicatedMember = await this.memberRepository.findOne({
+        where: { nickname: normalizedNickname },
+      });
+      if (duplicatedMember && duplicatedMember.id !== memberId) {
+        throw new ConflictException('Nickname already exists');
+      }
+
+      member.nickname = normalizedNickname;
       await this.memberRepository.save(member);
     }
+    this.validateProfileImage(file);
 
     let profileUrl = null;
     if (file) {
@@ -158,8 +212,9 @@ export class MemberService {
     }
     await this.profileRepository.save(profile);
 
-    if (dto.hashTag !== undefined) {
-      await this.tagService.syncMemberTags(member, dto.hashTag);
+    const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
+    if (normalizedHashTags !== undefined) {
+      await this.tagService.syncMemberTags(member, normalizedHashTags);
     }
 
     return true;
@@ -311,8 +366,11 @@ export class MemberService {
     const member = await this.findById(memberId);
     if (!member) throw new NotFoundException('Member not found');
 
+    const deletedSuffix = `${member.id}-${Date.now()}`;
     member.status = MemberStatus.INACTIVE;
     member.isDeleted = true;
+    member.email = `deleted-${deletedSuffix}@example.invalid`;
+    member.nickname = `deleted-member-${deletedSuffix}`;
     await this.memberRepository.save(member);
   }
 
@@ -336,8 +394,45 @@ export class MemberService {
   }
 
   async checkNickname(nickname: string): Promise<boolean> {
-    const member = await this.memberRepository.findOne({ where: { nickname } });
+    const normalizedNickname = nickname?.trim();
+    if (!normalizedNickname) {
+      throw new BadRequestException('Nickname is required');
+    }
+
+    const member = await this.memberRepository.findOne({
+      where: { nickname: normalizedNickname },
+    });
     return !!member;
+  }
+
+  private validateProfileImage(file?: Express.Multer.File): void {
+    if (!file) {
+      return;
+    }
+
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (
+      !MemberService.PROFILE_IMAGE_MIME_TYPES.has(file.mimetype) ||
+      !MemberService.PROFILE_IMAGE_EXTENSIONS.has(ext)
+    ) {
+      throw new BadRequestException(
+        'Profile image must be jpg, jpeg, png, or webp',
+      );
+    }
+  }
+
+  private normalizeHashTags(hashTags?: string[]): string[] | undefined {
+    if (!hashTags) {
+      return undefined;
+    }
+
+    return [
+      ...new Set(
+        hashTags
+          .map((tag) => tag.trim().replace(/^#/, '').toLowerCase())
+          .filter(Boolean),
+      ),
+    ];
   }
 
   async updatePassword(

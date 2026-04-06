@@ -68,6 +68,7 @@ export enum PaymentMethod {
 export enum PaymentStatus {
   PENDING = 'PENDING',
   COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
   REFUNDED = 'REFUNDED',
   CANCELLED = 'CANCELLED',
 }
@@ -99,4 +100,34 @@ export enum InquiryStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   ANSWERED = 'ANSWERED',
   CLOSED = 'CLOSED',
+}
+
+export enum WalletTransactionType {
+  CHARGE = 'CHARGE',
+  REFUND = 'REFUND',
+  USE = 'USE',
+  EARN = 'EARN',
+  WITHDRAW_REQUEST = 'WITHDRAW_REQUEST',
+  WITHDRAW_CANCEL = 'WITHDRAW_CANCEL',
+  WITHDRAW_COMPLETE = 'WITHDRAW_COMPLETE',
+}
+
+export enum WalletTransactionStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum WithdrawAccountStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}
+
+export enum WithdrawRequestStatus {
+  REQUESTED = 'REQUESTED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
 }

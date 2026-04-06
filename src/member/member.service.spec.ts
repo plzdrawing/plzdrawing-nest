@@ -7,12 +7,16 @@ import { Profile } from '../entities/profile.entity';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
   MemberRole,
   MemberStatus,
   ReviewStar,
   TagStatus,
 } from '../common/enums';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('MemberService', () => {
@@ -91,20 +95,44 @@ describe('MemberService', () => {
   });
 
   it('create는 기본 role/status를 넣어 저장한다', async () => {
+    memberRepository.findOne.mockResolvedValue(null);
     memberRepository.save.mockImplementation(async (v: any) => v);
 
-    const result = await service.create({ email: 'a@test.com' } as any);
+    const result = await service.create({
+      email: 'A@test.com ',
+      nickname: ' nick ',
+    } as any);
 
     expect(memberRepository.create).toHaveBeenCalledWith({
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
       email: 'a@test.com',
+      nickname: 'nick',
     });
     expect(result).toMatchObject({
       email: 'a@test.com',
+      nickname: 'nick',
       status: MemberStatus.ACTIVE,
       role: MemberRole.ROLE_MEMBER,
     });
+  });
+
+  it('create는 중복 이메일이면 ConflictException을 던진다', async () => {
+    memberRepository.findOne.mockResolvedValueOnce({ id: 1 });
+
+    await expect(
+      service.create({ email: 'a@test.com' } as any),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('create는 중복 닉네임이면 ConflictException을 던진다', async () => {
+    memberRepository.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 1 });
+
+    await expect(
+      service.create({ email: 'a@test.com', nickname: 'nick' } as any),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('findByEmail/findById/update는 repository에 위임한다', async () => {
@@ -113,7 +141,7 @@ describe('MemberService', () => {
       .mockResolvedValueOnce({ id: 2 })
       .mockResolvedValueOnce({ id: 3 });
 
-    await expect(service.findByEmail('a@test.com')).resolves.toEqual({
+    await expect(service.findByEmail(' A@test.com ')).resolves.toEqual({
       id: 1,
       email: 'a@test.com',
     });
@@ -122,7 +150,15 @@ describe('MemberService', () => {
       id: 3,
     });
 
+    expect(memberRepository.findOne).toHaveBeenNthCalledWith(1, {
+      where: { email: 'a@test.com' },
+    });
     expect(memberRepository.update).toHaveBeenCalledWith(3, { nickname: 'n' });
+  });
+
+  it('findByEmail는 비어 있는 이메일이면 null을 반환한다', async () => {
+    await expect(service.findByEmail('   ')).resolves.toBeNull();
+    expect(memberRepository.findOne).not.toHaveBeenCalled();
   });
 
   describe('uploadProfile', () => {
@@ -173,7 +209,7 @@ describe('MemberService', () => {
         profileUrl: 'https://old/url.png',
         introduction: 'old',
       };
-      const file = { originalname: 'a.png' } as any;
+      const file = { originalname: 'a.png', mimetype: 'image/png' } as any;
 
       memberRepository.findOne.mockResolvedValueOnce(member);
       awsService.uploadFile.mockResolvedValue('https://new/url.png');
@@ -233,7 +269,7 @@ describe('MemberService', () => {
         profileUrl: 'https://old/profile.png',
         introduction: 'old intro',
       };
-      const file = { originalname: 'new.png' } as any;
+      const file = { originalname: 'new.png', mimetype: 'image/png' } as any;
       memberRepository.findOne.mockResolvedValueOnce(member);
       awsService.uploadFile.mockResolvedValue('https://new/profile.png');
       profileRepository.findOne.mockResolvedValue(profile);
@@ -503,14 +539,22 @@ describe('MemberService', () => {
       await expect(service.withdraw(1)).rejects.toThrow(NotFoundException);
     });
 
-    it('회원 상태를 INACTIVE + 삭제 처리한다', async () => {
-      const member = { id: 1, status: MemberStatus.ACTIVE, isDeleted: false };
+    it('회원 상태를 INACTIVE + 삭제 처리하고 식별값을 정리한다', async () => {
+      const member = {
+        id: 1,
+        email: 'user@test.com',
+        nickname: 'nick',
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
+      };
       memberRepository.findOne.mockResolvedValue(member);
 
       await service.withdraw(1);
 
       expect(member.status).toBe(MemberStatus.INACTIVE);
       expect(member.isDeleted).toBe(true);
+      expect(member.email).toMatch(/^deleted-1-\d+@example\.invalid$/);
+      expect(member.nickname).toMatch(/^deleted-member-1-\d+$/);
       expect(memberRepository.save).toHaveBeenCalledWith(member);
     });
   });

@@ -11,6 +11,7 @@ describe('AuthController', () => {
   const mockAuthService = {
     register: jest.fn(),
     login: jest.fn(),
+    logout: jest.fn(),
     validateUser: jest.fn(),
     oAuthLogin: jest.fn(),
   };
@@ -88,6 +89,17 @@ describe('AuthController', () => {
   it('getProfile은 req.user를 그대로 반환한다', () => {
     const user = { id: 1, email: 'a@test.com' } as any;
     expect(controller.getProfile({ user } as any)).toBe(user);
+  });
+
+  it('logout은 authService.logout 결과를 반환한다', () => {
+    mockAuthService.logout.mockReturnValue({ success: true });
+
+    expect(
+      controller.logout({
+        headers: { authorization: 'Bearer token' },
+      } as any),
+    ).resolves.toEqual({ success: true });
+    expect(mockAuthService.logout).toHaveBeenCalledWith('Bearer token');
   });
 
   it('googleAuthRedirect는 토큰 발급 후 프론트 콜백으로 리다이렉트한다', async () => {

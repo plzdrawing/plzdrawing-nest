@@ -21,6 +21,12 @@ import { Inquiry } from './inquiry.entity';
 import { Notice } from './notice.entity';
 import { Terms } from './terms.entity';
 import { Tag } from './tag.entity';
+import { NotificationPreference } from './notification-preference.entity';
+import { Wallet } from './wallet.entity';
+import { WalletTransaction } from './wallet-transaction.entity';
+import { CoinOrder } from './coin-order.entity';
+import { WithdrawAccount } from './withdraw-account.entity';
+import { WithdrawRequest } from './withdraw-request.entity';
 
 @Entity('member')
 export class Member extends BaseEntity {
@@ -114,6 +120,15 @@ export class Member extends BaseEntity {
   )
   notifications: Notification[];
 
+  @OneToOne(
+    () => NotificationPreference,
+    (notificationPreference) => notificationPreference.member,
+  )
+  notificationPreference: NotificationPreference;
+
+  @OneToOne(() => Wallet, (wallet) => wallet.member)
+  wallet: Wallet;
+
   @OneToMany(
     () => Notification,
     (notification: Notification) => notification.sender,
@@ -137,4 +152,19 @@ export class Member extends BaseEntity {
 
   @OneToMany(() => Terms, (terms: Terms) => terms.admin)
   terms: Terms[];
+
+  @OneToMany(
+    () => WalletTransaction,
+    (walletTransaction) => walletTransaction.member,
+  )
+  walletTransactions: WalletTransaction[];
+
+  @OneToMany(() => CoinOrder, (coinOrder) => coinOrder.member)
+  coinOrders: CoinOrder[];
+
+  @OneToMany(() => WithdrawAccount, (withdrawAccount) => withdrawAccount.member)
+  withdrawAccounts: WithdrawAccount[];
+
+  @OneToMany(() => WithdrawRequest, (withdrawRequest) => withdrawRequest.member)
+  withdrawRequests: WithdrawRequest[];
 }

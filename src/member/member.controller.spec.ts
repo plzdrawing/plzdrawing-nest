@@ -120,7 +120,9 @@ describe('MemberController', () => {
   it('checkNickname은 쿼리값을 그대로 전달한다', async () => {
     mockMemberService.checkNickname.mockResolvedValue(false);
 
-    await expect(controller.checkNickname('nick')).resolves.toBe(false);
+    await expect(controller.checkNickname('nick')).resolves.toEqual({
+      available: true,
+    });
     expect(mockMemberService.checkNickname).toHaveBeenCalledWith('nick');
   });
 

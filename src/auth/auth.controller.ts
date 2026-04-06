@@ -22,6 +22,7 @@ import { OAuthUser } from './auth.service';
 import { CreateMemberDto } from './dto/create-member.dto';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
+import { LogoutResponseDto } from './dto/logout-response.dto';
 import { MemberResponseDto } from '../member/dto/member-response.dto';
 import { Member } from '../entities/member.entity';
 import { KakaoAuthGuard } from './guards/kakao-auth.guard';
@@ -86,6 +87,24 @@ export class AuthController {
   })
   getProfile(@Req() req: AuthRequest): Member {
     return req.user;
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('logout')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '로그아웃',
+    description:
+      '현재는 서버 측 토큰 저장소 없이 동작하므로, 호출 성공 시 프론트에서 access token을 삭제하면 됩니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '로그아웃 처리 성공',
+    type: LogoutResponseDto,
+  })
+  async logout(@Req() req: Request): Promise<LogoutResponseDto> {
+    const result = await this.authService.logout(req.headers.authorization);
+    return new LogoutResponseDto(result.success);
   }
 
   @Get('google')

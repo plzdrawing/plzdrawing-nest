@@ -4,7 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { MemberService } from '../member/member.service';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { MemberProvider, MemberRole } from '../common/enums';
+import { MemberProvider, MemberRole, MemberStatus } from '../common/enums';
+import { AuthTokenBlacklistService } from './auth-token-blacklist.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -16,6 +17,10 @@ describe('AuthService', () => {
 
   const mockJwtService = {
     sign: jest.fn(),
+  };
+
+  const mockAuthTokenBlacklistService = {
+    blacklistAccessToken: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -31,6 +36,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: AuthTokenBlacklistService,
+          useValue: mockAuthTokenBlacklistService,
         },
       ],
     }).compile();
@@ -49,6 +58,8 @@ describe('AuthService', () => {
         email: 'a@test.com',
         password: 'hashed',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       } as any;
       mockMemberService.findByEmail.mockResolvedValue(member);
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(true as never);
@@ -60,6 +71,8 @@ describe('AuthService', () => {
         id: 1,
         email: 'a@test.com',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       });
       expect((result as any).password).toBeUndefined();
     });
@@ -77,11 +90,41 @@ describe('AuthService', () => {
         id: 1,
         email: 'a@test.com',
         password: 'hashed',
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       });
       jest.spyOn(bcrypt, 'compare').mockResolvedValue(false as never);
 
       await expect(
         service.validateUser('a@test.com', 'wrong'),
+      ).resolves.toBeNull();
+    });
+
+    it('비활성 회원이면 null을 반환한다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 1,
+        email: 'inactive@test.com',
+        password: 'hashed',
+        status: MemberStatus.INACTIVE,
+        isDeleted: false,
+      });
+
+      await expect(
+        service.validateUser('inactive@test.com', 'plain'),
+      ).resolves.toBeNull();
+    });
+
+    it('삭제 회원이면 null을 반환한다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 1,
+        email: 'deleted@test.com',
+        password: 'hashed',
+        status: MemberStatus.ACTIVE,
+        isDeleted: true,
+      });
+
+      await expect(
+        service.validateUser('deleted@test.com', 'plain'),
       ).resolves.toBeNull();
     });
   });
@@ -123,6 +166,18 @@ describe('AuthService', () => {
     });
   });
 
+  describe('logout', () => {
+    it('access token을 블랙리스트에 등록한다', async () => {
+      await expect(service.logout('Bearer token')).resolves.toEqual({
+        success: true,
+      });
+
+      expect(
+        mockAuthTokenBlacklistService.blacklistAccessToken,
+      ).toHaveBeenCalledWith('Bearer token');
+    });
+  });
+
   describe('oAuthLogin', () => {
     it('소셜 계정 이메일이 없으면 UnauthorizedException을 던진다', async () => {
       await expect(
@@ -137,6 +192,8 @@ describe('AuthService', () => {
         id: 10,
         email: 'k@test.com',
         role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: false,
       };
       mockMemberService.findByEmail.mockResolvedValue(member);
       mockJwtService.sign.mockReturnValue('oauth-token');
@@ -154,6 +211,40 @@ describe('AuthService', () => {
         role: MemberRole.ROLE_MEMBER,
       });
       expect(result).toEqual({ access_token: 'oauth-token' });
+    });
+
+    it('비활성 기존 회원이면 UnauthorizedException을 던진다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 10,
+        email: 'inactive-social@test.com',
+        role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.INACTIVE,
+        isDeleted: false,
+      });
+
+      await expect(
+        service.oAuthLogin({
+          email: 'inactive-social@test.com',
+          provider: 'kakao',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('삭제 기존 회원이면 UnauthorizedException을 던진다', async () => {
+      mockMemberService.findByEmail.mockResolvedValue({
+        id: 10,
+        email: 'deleted-social@test.com',
+        role: MemberRole.ROLE_MEMBER,
+        status: MemberStatus.ACTIVE,
+        isDeleted: true,
+      });
+
+      await expect(
+        service.oAuthLogin({
+          email: 'deleted-social@test.com',
+          provider: 'google',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('신규 구글 회원이면 임시회원으로 생성 후 토큰 발급한다', async () => {

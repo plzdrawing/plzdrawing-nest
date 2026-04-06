@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
+import { MemberStatus } from '../common/enums';
 
 describe('JwtStrategy', () => {
   const mockConfigService = {
@@ -7,6 +8,9 @@ describe('JwtStrategy', () => {
   };
   const mockMemberService = {
     findById: jest.fn(),
+  };
+  const mockAuthTokenBlacklistService = {
+    isBlacklisted: jest.fn(),
   };
 
   beforeEach(() => {
@@ -17,6 +21,7 @@ describe('JwtStrategy', () => {
     const strategy = new JwtStrategy(
       mockConfigService as any,
       mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
     );
 
     expect(strategy).toBeDefined();
@@ -27,11 +32,23 @@ describe('JwtStrategy', () => {
     const strategy = new JwtStrategy(
       mockConfigService as any,
       mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
     );
-    const member = { id: 1, email: 'a@test.com' };
+    const member = {
+      id: 1,
+      email: 'a@test.com',
+      status: MemberStatus.ACTIVE,
+      isDeleted: false,
+    };
     mockMemberService.findById.mockResolvedValue(member);
 
-    await expect(strategy.validate({ sub: 1 })).resolves.toBe(member);
+    mockAuthTokenBlacklistService.isBlacklisted.mockResolvedValue(false);
+
+    await expect(
+      strategy.validate({ headers: { authorization: 'Bearer token' } } as any, {
+        sub: 1,
+      }),
+    ).resolves.toBe(member);
     expect(mockMemberService.findById).toHaveBeenCalledWith(1);
   });
 
@@ -39,11 +56,70 @@ describe('JwtStrategy', () => {
     const strategy = new JwtStrategy(
       mockConfigService as any,
       mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
     );
     mockMemberService.findById.mockResolvedValue(null);
+    mockAuthTokenBlacklistService.isBlacklisted.mockResolvedValue(false);
 
-    await expect(strategy.validate({ sub: 999 })).rejects.toThrow(
-      UnauthorizedException,
+    await expect(
+      strategy.validate({ headers: { authorization: 'Bearer token' } } as any, {
+        sub: 999,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('validate는 비활성 회원이면 UnauthorizedException을 던진다', async () => {
+    const strategy = new JwtStrategy(
+      mockConfigService as any,
+      mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
     );
+    mockMemberService.findById.mockResolvedValue({
+      id: 1,
+      status: MemberStatus.INACTIVE,
+      isDeleted: false,
+    });
+    mockAuthTokenBlacklistService.isBlacklisted.mockResolvedValue(false);
+
+    await expect(
+      strategy.validate({ headers: { authorization: 'Bearer token' } } as any, {
+        sub: 1,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('validate는 삭제 회원이면 UnauthorizedException을 던진다', async () => {
+    const strategy = new JwtStrategy(
+      mockConfigService as any,
+      mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
+    );
+    mockMemberService.findById.mockResolvedValue({
+      id: 1,
+      status: MemberStatus.ACTIVE,
+      isDeleted: true,
+    });
+    mockAuthTokenBlacklistService.isBlacklisted.mockResolvedValue(false);
+
+    await expect(
+      strategy.validate({ headers: { authorization: 'Bearer token' } } as any, {
+        sub: 1,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('validate는 블랙리스트 토큰이면 UnauthorizedException을 던진다', async () => {
+    const strategy = new JwtStrategy(
+      mockConfigService as any,
+      mockMemberService as any,
+      mockAuthTokenBlacklistService as any,
+    );
+    mockAuthTokenBlacklistService.isBlacklisted.mockResolvedValue(true);
+
+    await expect(
+      strategy.validate({ headers: { authorization: 'Bearer token' } } as any, {
+        sub: 1,
+      }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 });
