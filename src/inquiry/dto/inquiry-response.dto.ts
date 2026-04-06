@@ -29,6 +29,21 @@ export class InquiryResponseDto {
   })
   answer: string | null;
 
+  @ApiProperty({ example: 10, nullable: true })
+  memberId: number | null;
+
+  @ApiProperty({ example: '그림좋아', nullable: true })
+  memberNickname: string | null;
+
+  @ApiProperty({ example: 'user@example.com', nullable: true })
+  memberEmail: string | null;
+
+  @ApiProperty({
+    example: 'https://cdn.example.com/profile.png',
+    nullable: true,
+  })
+  memberProfileUrl: string | null;
+
   @ApiProperty({ example: '2026-04-02T10:00:00.000Z' })
   createdAt: Date;
 
@@ -50,6 +65,10 @@ export class InquiryResponseDto {
     content: string,
     status: InquiryStatus,
     answer: string | null,
+    memberId: number | null,
+    memberNickname: string | null,
+    memberEmail: string | null,
+    memberProfileUrl: string | null,
     createdAt: Date,
     answeredAt: Date | null,
     imageUrls: string[],
@@ -60,6 +79,10 @@ export class InquiryResponseDto {
     this.content = content;
     this.status = status;
     this.answer = answer;
+    this.memberId = memberId;
+    this.memberNickname = memberNickname;
+    this.memberEmail = memberEmail;
+    this.memberProfileUrl = memberProfileUrl;
     this.createdAt = createdAt;
     this.answeredAt = answeredAt;
     this.imageUrls = imageUrls;

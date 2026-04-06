@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -22,6 +23,7 @@ import {
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
+import { InquiryAdminQueryDto } from './dto/inquiry-admin-query.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { InquiryService } from './inquiry.service';
 import { UpdateInquiryAdminDto } from './dto/update-inquiry-admin.dto';
@@ -92,8 +94,9 @@ export class InquiryController {
   @ApiResponse({ status: 403, description: '관리자 권한 필요' })
   async findAllForAdmin(
     @GetUser() member: Member,
+    @Query() query: InquiryAdminQueryDto,
   ): Promise<InquiryResponseDto[]> {
-    return this.inquiryService.findAllForAdmin(member);
+    return this.inquiryService.findAllForAdmin(member, query);
   }
 
   @Get('v1/admin/:id')

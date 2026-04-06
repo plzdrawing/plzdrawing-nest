@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import * as path from 'path';
 import { InquiryStatus, MemberRole } from '../common/enums';
 import { AwsService } from '../common/aws/aws.service';
@@ -13,6 +13,7 @@ import { InquiryImage } from '../entities/inquiry-image.entity';
 import { Inquiry } from '../entities/inquiry.entity';
 import { Member } from '../entities/member.entity';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
+import { InquiryAdminQueryDto } from './dto/inquiry-admin-query.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
 import { UpdateInquiryAdminDto } from './dto/update-inquiry-admin.dto';
 
@@ -92,13 +93,46 @@ export class InquiryService {
     return this.mapInquiry(inquiry);
   }
 
-  async findAllForAdmin(member: Member): Promise<InquiryResponseDto[]> {
+  async findAllForAdmin(
+    member: Member,
+    query: InquiryAdminQueryDto,
+  ): Promise<InquiryResponseDto[]> {
     this.assertAdmin(member);
 
-    const inquiries = await this.inquiryRepository.find({
-      relations: ['images'],
-      order: { createdAt: 'DESC' },
-    });
+    const queryBuilder = this.inquiryRepository
+      .createQueryBuilder('inquiry')
+      .leftJoinAndSelect('inquiry.images', 'images')
+      .leftJoinAndSelect('inquiry.member', 'member')
+      .leftJoinAndSelect('member.profile', 'profile')
+      .orderBy('inquiry.createdAt', 'DESC');
+
+    if (query.status) {
+      queryBuilder.andWhere('inquiry.status = :status', {
+        status: query.status,
+      });
+    }
+
+    if (query.category) {
+      queryBuilder.andWhere('inquiry.category = :category', {
+        category: query.category,
+      });
+    }
+
+    const keyword = query.keyword?.trim();
+    if (keyword) {
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('member.nickname LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('member.email LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('inquiry.title LIKE :keyword', { keyword: `%${keyword}%` })
+            .orWhere('inquiry.content LIKE :keyword', {
+              keyword: `%${keyword}%`,
+            });
+        }),
+      );
+    }
+
+    const inquiries = await queryBuilder.getMany();
 
     return inquiries.map((inquiry) => this.mapInquiry(inquiry));
   }
@@ -166,6 +200,10 @@ export class InquiryService {
       inquiry.content,
       inquiry.status,
       inquiry.answer ?? null,
+      inquiry.member?.id ?? inquiry.memberId ?? null,
+      inquiry.member?.nickname ?? null,
+      inquiry.member?.email ?? null,
+      inquiry.member?.profile?.profileUrl ?? null,
       inquiry.createdAt,
       inquiry.answeredAt ?? null,
       inquiry.images?.map((image) => image.imageUrl) ?? [],
