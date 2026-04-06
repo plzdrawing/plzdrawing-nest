@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsNumber,
   IsOptional,
   IsString,
@@ -21,7 +23,7 @@ export class CreateChatRoomDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(1000)
+  @MaxLength(200)
   description?: string;
 
   @ApiPropertyOptional({ description: '요청 금액', example: 5000 })
@@ -30,4 +32,15 @@ export class CreateChatRoomDto {
   @IsNumber()
   @Min(0)
   price?: number;
+
+  @ApiPropertyOptional({
+    description: '참고 이미지 object key 목록 (최대 5개)',
+    type: [String],
+    example: ['chat/request/1/2026/03/uuid1.png'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsString({ each: true })
+  referenceImageObjectKeys?: string[];
 }

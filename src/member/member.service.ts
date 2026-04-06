@@ -12,12 +12,28 @@ import * as bcrypt from 'bcrypt';
 import * as path from 'path';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
-import { MemberRole, MemberStatus, TagStatus } from '../common/enums';
+import {
+  MemberRole,
+  MemberStatus,
+  ReviewStar,
+  TagStatus,
+} from '../common/enums';
 import { AwsService } from '../common/aws/aws.service';
 import { TagService } from '../tag/tag.service';
 import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
+import {
+  PublicReviewSummaryResponseDto,
+  ReviewKeywordCountDto,
+} from './dto/public-review-summary-response.dto';
+import {
+  PublicReviewListItemDto,
+  PublicReviewListResponseDto,
+} from './dto/public-review-list-response.dto';
+import { MemberQueryService } from './member-query.service';
 
 @Injectable()
 export class MemberService {
@@ -41,6 +57,7 @@ export class MemberService {
     private readonly profileRepository: Repository<Profile>,
     private readonly awsService: AwsService,
     private readonly tagService: TagService,
+    private readonly memberQueryService: MemberQueryService,
   ) {}
 
   async create(data: Partial<Member>): Promise<Member> {
@@ -126,7 +143,7 @@ export class MemberService {
         }
         profile.profileUrl = profileUrl;
       }
-      if (dto.introduce) {
+      if (dto.introduce !== undefined) {
         profile.introduction = dto.introduce;
       }
     }
@@ -135,6 +152,8 @@ export class MemberService {
     const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
     if (normalizedHashTags) {
       await this.tagService.syncMemberTags(member, normalizedHashTags);
+    if (dto.hashTag !== undefined) {
+      await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
     if (member.role === MemberRole.ROLE_TEMP) {
@@ -189,7 +208,7 @@ export class MemberService {
         }
         profile.profileUrl = profileUrl;
       }
-      if (dto.introduce) {
+      if (dto.introduce !== undefined) {
         profile.introduction = dto.introduce;
       }
     }
@@ -198,6 +217,8 @@ export class MemberService {
     const normalizedHashTags = this.normalizeHashTags(dto.hashTag);
     if (normalizedHashTags) {
       await this.tagService.syncMemberTags(member, normalizedHashTags);
+    if (dto.hashTag !== undefined) {
+      await this.tagService.syncMemberTags(member, dto.hashTag);
     }
 
     return true;
@@ -221,6 +242,128 @@ export class MemberService {
       member.profile ? member.profile.introduction : null,
       activeTags,
     );
+  }
+
+  async getPublicProfile(memberId: number): Promise<PublicProfileResponseDto> {
+    const member =
+      await this.memberQueryService.findActiveMemberWithProfileAndTags(
+        memberId,
+      );
+    if (!member) throw new NotFoundException('Member not found');
+
+    const activeTags = member.memberTags
+      .filter((mt) => mt.status === TagStatus.ACTIVE)
+      .map((mt) => mt.tag.name);
+    const drawingCount = await this.memberQueryService.countMemberPosts(
+      member.id,
+    );
+
+    return new PublicProfileResponseDto(
+      member.id,
+      member.nickname,
+      member.profile ? member.profile.profileUrl : null,
+      member.profile ? member.profile.introduction : null,
+      activeTags,
+      drawingCount,
+    );
+  }
+
+  async getPublicReviewSummary(
+    memberId: number,
+  ): Promise<PublicReviewSummaryResponseDto> {
+    const exists = await this.memberQueryService.existsActiveMember(memberId);
+    if (!exists) throw new NotFoundException('Member not found');
+
+    const reviews =
+      await this.memberQueryService.findReceiverReviewStars(memberId);
+
+    const reviewCount = reviews.length;
+    const averageStar =
+      reviewCount > 0
+        ? Number(
+            (
+              reviews.reduce(
+                (sum, review) => sum + this.convertStarToNumber(review.star),
+                0,
+              ) / reviewCount
+            ).toFixed(2),
+          )
+        : 0;
+
+    const completedWorkCount =
+      await this.memberQueryService.countCompletedWorks(memberId);
+
+    let topKeywords: ReviewKeywordCountDto[] = [];
+    if (reviews.length > 0) {
+      const reviewIds = reviews.map((review) => review.id);
+      const maps =
+        await this.memberQueryService.findKeywordMapsByReviewIds(reviewIds);
+
+      const keywordCounter = new Map<string, number>();
+      maps.forEach((map) => {
+        if (!map.keyword || !map.keyword.keyword || !map.keyword.isActive) {
+          return;
+        }
+        const prev = keywordCounter.get(map.keyword.keyword) ?? 0;
+        keywordCounter.set(map.keyword.keyword, prev + 1);
+      });
+
+      topKeywords = [...keywordCounter.entries()]
+        .sort((a, b) => {
+          if (b[1] !== a[1]) {
+            return b[1] - a[1];
+          }
+          return a[0].localeCompare(b[0], 'ko');
+        })
+        .slice(0, 5)
+        .map(([keyword, count]) => new ReviewKeywordCountDto(keyword, count));
+    }
+
+    return new PublicReviewSummaryResponseDto(
+      averageStar,
+      reviewCount,
+      completedWorkCount,
+      topKeywords,
+    );
+  }
+
+  async getPublicReviews(
+    memberId: number,
+    paginationDto: PaginationDto,
+  ): Promise<PublicReviewListResponseDto> {
+    const exists = await this.memberQueryService.existsActiveMember(memberId);
+    if (!exists) throw new NotFoundException('Member not found');
+
+    const { page = 1, limit = 10 } = paginationDto;
+    const [reviews, total] = await this.memberQueryService.findPublicReviews(
+      memberId,
+      page,
+      limit,
+    );
+
+    const data = reviews.map((review) => {
+      const keywords = review.reviewKeywordMaps
+        ? review.reviewKeywordMaps
+            .filter((map) => map.keyword && map.keyword.isActive)
+            .map((map) => map.keyword.keyword)
+        : [];
+
+      return new PublicReviewListItemDto(
+        review.id,
+        this.convertStarToNumber(review.star),
+        review.content ?? '',
+        keywords,
+        review.imageObjectKeys ?? [],
+        review.writerId,
+        review.writer ? review.writer.nickname : '',
+        review.writer && review.writer.profile
+          ? review.writer.profile.profileUrl
+          : null,
+        review.createdAt,
+      );
+    });
+
+    return { data, total, page, limit };
   }
 
   async withdraw(memberId: number): Promise<void> {
@@ -334,6 +477,23 @@ export class MemberService {
 
     if (result.affected && result.affected > 0) {
       this.logger.log(`Deleted ${result.affected} expired TEMP members.`);
+    }
+  }
+
+  private convertStarToNumber(star: ReviewStar): number {
+    switch (star) {
+      case ReviewStar.ONE:
+        return 1;
+      case ReviewStar.TWO:
+        return 2;
+      case ReviewStar.THREE:
+        return 3;
+      case ReviewStar.FOUR:
+        return 4;
+      case ReviewStar.FIVE:
+        return 5;
+      default:
+        return 0;
     }
   }
 }

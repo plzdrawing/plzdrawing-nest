@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MemberService } from './member.service';
+import { MemberQueryService } from './member-query.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Member } from '../entities/member.entity';
 import { Profile } from '../entities/profile.entity';
@@ -11,6 +12,13 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import {
+  MemberRole,
+  MemberStatus,
+  ReviewStar,
+  TagStatus,
+} from '../common/enums';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('MemberService', () => {
@@ -18,6 +26,7 @@ describe('MemberService', () => {
 
   let memberRepository: any;
   let profileRepository: any;
+  let memberQueryService: any;
   let awsService: any;
   let tagService: any;
 
@@ -36,6 +45,15 @@ describe('MemberService', () => {
       create: jest.fn((data) => data),
       save: jest.fn(),
       findOne: jest.fn(),
+    };
+    memberQueryService = {
+      findActiveMemberWithProfileAndTags: jest.fn(),
+      existsActiveMember: jest.fn(),
+      countMemberPosts: jest.fn(),
+      findReceiverReviewStars: jest.fn(),
+      countCompletedWorks: jest.fn(),
+      findKeywordMapsByReviewIds: jest.fn(),
+      findPublicReviews: jest.fn(),
     };
     awsService = {
       uploadFile: jest.fn(),
@@ -63,6 +81,10 @@ describe('MemberService', () => {
         {
           provide: TagService,
           useValue: tagService,
+        },
+        {
+          provide: MemberQueryService,
+          useValue: memberQueryService,
         },
       ],
     }).compile();
@@ -207,6 +229,30 @@ describe('MemberService', () => {
       expect(tagService.syncMemberTags).not.toHaveBeenCalled();
       expect(memberRepository.save).not.toHaveBeenCalledWith(member);
     });
+
+    it('빈 소개/빈 해시태그 배열도 갱신한다', async () => {
+      const member = { id: 1, role: MemberRole.ROLE_MEMBER };
+      const profile = {
+        memberId: 1,
+        profileUrl: 'https://old/url.png',
+        introduction: 'old',
+      };
+
+      memberRepository.findOne.mockResolvedValueOnce(member);
+      profileRepository.findOne.mockResolvedValue(profile);
+
+      await service.uploadProfile(
+        1,
+        null as any,
+        {
+          introduce: '',
+          hashTag: [],
+        } as any,
+      );
+
+      expect(profile.introduction).toBe('');
+      expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, []);
+    });
   });
 
   describe('updateProfile', () => {
@@ -246,6 +292,31 @@ describe('MemberService', () => {
       expect(profileRepository.save).toHaveBeenCalledWith(profile);
       expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, ['x']);
     });
+
+    it('빈 소개/빈 해시태그 배열도 갱신한다', async () => {
+      const member = { id: 1, nickname: 'old' };
+      const profile = {
+        memberId: 1,
+        profileUrl: 'https://old/profile.png',
+        introduction: 'old intro',
+      };
+      memberRepository.findOne.mockResolvedValueOnce(member);
+      profileRepository.findOne.mockResolvedValue(profile);
+
+      await service.updateProfile(
+        1,
+        null as any,
+        {
+          nickname: 'newNick',
+          introduce: '',
+          hashTag: [],
+        } as any,
+      );
+
+      expect(member.nickname).toBe('newNick');
+      expect(profile.introduction).toBe('');
+      expect(tagService.syncMemberTags).toHaveBeenCalledWith(member, []);
+    });
   });
 
   describe('getMyProfile', () => {
@@ -278,6 +349,188 @@ describe('MemberService', () => {
           hashTags: ['cat', 'bird'],
         }),
       );
+    });
+  });
+
+  describe('getPublicProfile', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberQueryService.findActiveMemberWithProfileAndTags.mockResolvedValue(
+        null,
+      );
+
+      await expect(service.getPublicProfile(2)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('공개 프로필 응답을 구성한다', async () => {
+      memberQueryService.findActiveMemberWithProfileAndTags.mockResolvedValue({
+        id: 2,
+        nickname: 'artist',
+        profile: {
+          profileUrl: 'https://profile.png',
+          introduction: 'hello',
+        },
+        memberTags: [
+          { status: TagStatus.ACTIVE, tag: { name: '#귀여운' } },
+          { status: TagStatus.INACTIVE, tag: { name: '#숨김' } },
+          { status: TagStatus.ACTIVE, tag: { name: '#누사' } },
+        ],
+      });
+      memberQueryService.countMemberPosts.mockResolvedValue(7);
+
+      const result = await service.getPublicProfile(2);
+
+      expect(memberQueryService.countMemberPosts).toHaveBeenCalledWith(2);
+      expect(result).toEqual(
+        expect.objectContaining({
+          memberId: 2,
+          nickname: 'artist',
+          profileImageUrl: 'https://profile.png',
+          introduce: 'hello',
+          hashTags: ['#귀여운', '#누사'],
+          drawingCount: 7,
+        }),
+      );
+    });
+  });
+
+  describe('getPublicReviewSummary', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberQueryService.existsActiveMember.mockResolvedValue(false);
+
+      await expect(service.getPublicReviewSummary(10)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('후기/키워드/완료작업 집계를 반환한다', async () => {
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findReceiverReviewStars.mockResolvedValue([
+        { id: 1, star: ReviewStar.FIVE },
+        { id: 2, star: ReviewStar.FOUR },
+        { id: 3, star: ReviewStar.ONE },
+      ]);
+      memberQueryService.countCompletedWorks.mockResolvedValue(9);
+      memberQueryService.findKeywordMapsByReviewIds.mockResolvedValue([
+        { keyword: { keyword: '친절해요', isActive: true } },
+        { keyword: { keyword: '친절해요', isActive: true } },
+        { keyword: { keyword: '귀여워요', isActive: true } },
+        { keyword: { keyword: '섬세해요', isActive: true } },
+        { keyword: { keyword: '빠르게 작업해요', isActive: true } },
+        { keyword: { keyword: '원하는 대로 그려줘요', isActive: true } },
+        { keyword: { keyword: '숨김키워드', isActive: false } },
+      ]);
+
+      const result = await service.getPublicReviewSummary(10);
+
+      expect(memberQueryService.findReceiverReviewStars).toHaveBeenCalledWith(
+        10,
+      );
+      expect(memberQueryService.countCompletedWorks).toHaveBeenCalledWith(10);
+      expect(result).toEqual(
+        expect.objectContaining({
+          averageStar: 3.33,
+          reviewCount: 3,
+          completedWorkCount: 9,
+          topKeywords: [
+            expect.objectContaining({ keyword: '친절해요', count: 2 }),
+            expect.objectContaining({ keyword: '귀여워요', count: 1 }),
+            expect.objectContaining({ keyword: '빠르게 작업해요', count: 1 }),
+            expect.objectContaining({ keyword: '섬세해요', count: 1 }),
+            expect.objectContaining({
+              keyword: '원하는 대로 그려줘요',
+              count: 1,
+            }),
+          ],
+        }),
+      );
+    });
+
+    it('후기가 없으면 0 집계를 반환한다', async () => {
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findReceiverReviewStars.mockResolvedValue([]);
+      memberQueryService.countCompletedWorks.mockResolvedValue(0);
+
+      const result = await service.getPublicReviewSummary(11);
+
+      expect(
+        memberQueryService.findKeywordMapsByReviewIds,
+      ).not.toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          averageStar: 0,
+          reviewCount: 0,
+          completedWorkCount: 0,
+          topKeywords: [],
+        }),
+      );
+    });
+  });
+
+  describe('getPublicReviews', () => {
+    it('회원이 없으면 NotFoundException을 던진다', async () => {
+      memberQueryService.existsActiveMember.mockResolvedValue(false);
+
+      await expect(
+        service.getPublicReviews(99, { page: 1, limit: 10 } as any),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('후기 목록을 페이지네이션으로 반환한다', async () => {
+      const createdAt = new Date('2026-03-28T00:00:00.000Z');
+      memberQueryService.existsActiveMember.mockResolvedValue(true);
+      memberQueryService.findPublicReviews.mockResolvedValue([
+        [
+          {
+            id: 10,
+            star: ReviewStar.FIVE,
+            content: '만족해요',
+            imageObjectKeys: ['review/1.png'],
+            writerId: 4,
+            writer: {
+              nickname: '작성자',
+              profile: { profileUrl: 'https://writer.png' },
+            },
+            createdAt,
+            reviewKeywordMaps: [
+              { keyword: { keyword: '친절해요', isActive: true } },
+              { keyword: { keyword: '숨김', isActive: false } },
+              { keyword: { keyword: '원하는 대로 그려줘요', isActive: true } },
+            ],
+          },
+        ],
+        1,
+      ]);
+
+      const result = await service.getPublicReviews(5, {
+        page: 2,
+        limit: 3,
+      } as any);
+
+      expect(memberQueryService.findPublicReviews).toHaveBeenCalledWith(
+        5,
+        2,
+        3,
+      );
+      expect(result).toEqual({
+        data: [
+          expect.objectContaining({
+            id: 10,
+            starScore: 5,
+            content: '만족해요',
+            keywords: ['친절해요', '원하는 대로 그려줘요'],
+            imageObjectKeys: ['review/1.png'],
+            writerId: 4,
+            writerNickname: '작성자',
+            writerProfileImageUrl: 'https://writer.png',
+            createdAt,
+          }),
+        ],
+        total: 1,
+        page: 2,
+        limit: 3,
+      });
     });
   });
 

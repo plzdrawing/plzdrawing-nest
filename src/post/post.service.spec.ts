@@ -9,7 +9,9 @@ import { LikeService } from '../like/like.service';
 import { ReviewService } from '../review/review.service';
 import { MemberService } from '../member/member.service';
 import { DataSource } from 'typeorm';
-import { NotFoundException } from '@nestjs/common';
+import { PostFeedQueryRepository } from './query/post-feed.query.repository';
+import { PostFeedMapper } from './mapper/post-feed.mapper';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 describe('PostService', () => {
   let service: PostService;
@@ -21,34 +23,27 @@ describe('PostService', () => {
   let likeService: any;
   let reviewService: any;
   let memberService: any;
+  let postFeedQueryRepository: any;
   let dataSource: any;
   let queryRunner: any;
-  let countQb: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
-
-    countQb = {
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      groupBy: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([]),
-    };
 
     postRepository = {
       findAndCount: jest.fn(),
       findOne: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
-      createQueryBuilder: jest.fn().mockReturnValue(countQb),
     };
     postImageRepository = {};
     awsService = {
       uploadFiles: jest.fn(),
+      deleteFile: jest.fn(),
     };
     tagService = {
       findTagsByContentIds: jest.fn(),
+      syncTags: jest.fn(),
     };
     likeService = {
       countLikesByContentIds: jest.fn(),
@@ -58,6 +53,10 @@ describe('PostService', () => {
     };
     memberService = {
       findProfileImageUrlByMemberIds: jest.fn(),
+    };
+    postFeedQueryRepository = {
+      findLatestPosts: jest.fn(),
+      countDrawingsByMemberIds: jest.fn(),
     };
 
     queryRunner = {
@@ -69,6 +68,9 @@ describe('PostService', () => {
       manager: {
         create: jest.fn((_: any, data: any) => ({ ...data })),
         save: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+        find: jest.fn(),
       },
     };
     dataSource = {
@@ -88,6 +90,11 @@ describe('PostService', () => {
         { provide: LikeService, useValue: likeService },
         { provide: ReviewService, useValue: reviewService },
         { provide: MemberService, useValue: memberService },
+        {
+          provide: PostFeedQueryRepository,
+          useValue: postFeedQueryRepository,
+        },
+        PostFeedMapper,
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
@@ -160,6 +167,22 @@ describe('PostService', () => {
       expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(queryRunner.release).toHaveBeenCalled();
     });
+
+    it('hashTag가 있으면 생성 후 syncTags를 호출한다', async () => {
+      queryRunner.manager.save.mockResolvedValueOnce({ id: 301 });
+      jest.spyOn(service, 'findOne').mockResolvedValue({ id: 301 } as any);
+
+      await service.create(
+        { id: 1 } as any,
+        { content: 'hello', hashTag: ['고양이', ' 캐릭터 '] } as any,
+        [],
+      );
+
+      expect(tagService.syncTags).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 301 }),
+        ['고양이', '캐릭터'],
+      );
+    });
   });
 
   it('findAll은 페이지네이션으로 조회한다', async () => {
@@ -195,7 +218,12 @@ describe('PostService', () => {
 
   describe('getLatestContents', () => {
     it('게시글이 없으면 빈 결과를 반환한다', async () => {
-      postRepository.findAndCount.mockResolvedValue([[], 0]);
+      postFeedQueryRepository.findLatestPosts.mockResolvedValue({
+        posts: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+      });
 
       await expect(
         service.getLatestContents({ page: 1, limit: 10 } as any),
@@ -209,14 +237,16 @@ describe('PostService', () => {
 
     it('집계 맵을 이용해 LatestContentsResponse 목록으로 매핑한다', async () => {
       const now = new Date('2024-01-01T00:00:00Z');
-      postRepository.findAndCount.mockResolvedValue([
-        [
+      postFeedQueryRepository.findLatestPosts.mockResolvedValue({
+        posts: [
           {
             id: 1,
             memberId: 100,
             createdAt: now,
             content: 'p1',
             category: 'DRAWING',
+            timeTaken: '10분',
+            price: 12000,
             images: [{ imageUrl: 'img1' }],
             member: { nickname: 'seller1' },
           },
@@ -226,12 +256,16 @@ describe('PostService', () => {
             createdAt: now,
             content: 'p2',
             category: null,
+            timeTaken: null,
+            price: null,
             images: [{ imageUrl: 'img2a' }, { imageUrl: 'img2b' }],
             member: { nickname: 'seller2' },
           },
         ],
-        2,
-      ]);
+        total: 2,
+        page: 1,
+        limit: 10,
+      });
       tagService.findTagsByContentIds.mockResolvedValue(
         new Map([
           [1, ['cat']],
@@ -281,7 +315,8 @@ describe('PostService', () => {
             imageUrls: ['img1'],
             tags: ['cat'],
             explanation: 'p1',
-            timeTaken: 'DRAWING',
+            timeTaken: '10분',
+            price: 12000,
             likeCount: 3,
           }),
         }),
@@ -296,9 +331,59 @@ describe('PostService', () => {
           contents: expect.objectContaining({
             contentId: 2,
             timeTaken: '',
+            price: 0,
             likeCount: 5,
           }),
         }),
+      );
+    });
+
+    it('scrappedOnly=true인데 memberId가 없으면 UnauthorizedException을 던진다', async () => {
+      await expect(
+        service.getLatestContents({
+          page: 1,
+          limit: 10,
+          scrappedOnly: true,
+        } as any),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(postFeedQueryRepository.findLatestPosts).not.toHaveBeenCalled();
+    });
+
+    it('scrappedOnly=true면 query repository에 memberId를 전달한다', async () => {
+      postFeedQueryRepository.findLatestPosts.mockResolvedValue({
+        posts: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+      });
+
+      await service.getLatestContents(
+        { page: 1, limit: 10, scrappedOnly: true } as any,
+        123,
+      );
+
+      expect(postFeedQueryRepository.findLatestPosts).toHaveBeenCalledWith(
+        { page: 1, limit: 10, scrappedOnly: true },
+        123,
+      );
+    });
+
+    it('q가 있으면 query repository에 그대로 전달한다', async () => {
+      postFeedQueryRepository.findLatestPosts.mockResolvedValue({
+        posts: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+      });
+
+      await service.getLatestContents(
+        { page: 1, limit: 10, q: '  고양이  ' } as any,
+        1,
+      );
+
+      expect(postFeedQueryRepository.findLatestPosts).toHaveBeenCalledWith(
+        { page: 1, limit: 10, q: '  고양이  ' },
+        1,
       );
     });
   });
@@ -326,6 +411,8 @@ describe('PostService', () => {
             createdAt: now,
             images: [{ imageUrl: 'u1' }, { imageUrl: 'u2' }],
             content: 'desc',
+            timeTaken: '1시간',
+            price: 4500,
           },
         ],
         1,
@@ -347,8 +434,8 @@ describe('PostService', () => {
             imageUrls: ['u1', 'u2'],
             tags: ['tag1'],
             explanation: 'desc',
-            timeTaken: '',
-            price: 0,
+            timeTaken: '1시간',
+            price: 4500,
             likeCount: 2,
           }),
         ],
@@ -360,28 +447,19 @@ describe('PostService', () => {
   });
 
   describe('countDrawingsByMemberIds', () => {
-    it('memberIds가 비어있으면 빈 Map을 반환한다', async () => {
-      const result = await service.countDrawingsByMemberIds([]);
-
-      expect(result.size).toBe(0);
-      expect(postRepository.createQueryBuilder).not.toHaveBeenCalled();
-    });
-
-    it('쿼리 결과를 숫자 Map으로 변환한다', async () => {
-      countQb.getRawMany.mockResolvedValue([
-        { memberId: '100', count: '4' },
-        { memberId: '200', count: '8' },
+    it('query repository로 위임한다', async () => {
+      const map = new Map<number, number>([
+        [100, 4],
+        [200, 8],
       ]);
+      postFeedQueryRepository.countDrawingsByMemberIds.mockResolvedValue(map);
 
       const result = await service.countDrawingsByMemberIds([100, 200]);
 
-      expect(postRepository.createQueryBuilder).toHaveBeenCalledWith('post');
-      expect(countQb.where).toHaveBeenCalledWith(
-        'post.member_id IN (:...memberIds)',
-        { memberIds: [100, 200] },
-      );
-      expect(result.get(100)).toBe(4);
-      expect(result.get(200)).toBe(8);
+      expect(
+        postFeedQueryRepository.countDrawingsByMemberIds,
+      ).toHaveBeenCalledWith([100, 200]);
+      expect(result).toBe(map);
     });
   });
 
@@ -398,19 +476,83 @@ describe('PostService', () => {
       await expect(service.findOne(1)).resolves.toEqual({ id: 1 });
     });
 
-    it('update는 저장 후 상세를 반환하고 remove는 삭제를 위임한다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 7, content: 'updated' });
+    it('update는 작성자 본인 요청이면 수정 후 상세를 반환한다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
+      queryRunner.manager.find.mockResolvedValue([]);
+      jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ id: 7, content: 'updated' } as any);
 
-      await expect(service.update(7, { content: 'updated' })).resolves.toEqual({
+      await expect(
+        service.update(7, { id: 10 } as any, { content: 'updated' } as any),
+      ).resolves.toEqual({
         id: 7,
         content: 'updated',
       });
-      expect(postRepository.update).toHaveBeenCalledWith(7, {
+
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
         content: 'updated',
       });
+      expect(queryRunner.manager.update).toHaveBeenCalledWith(Post, 7, {
+        thumbnailUrl: null,
+      });
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
+    });
 
-      await service.remove(7);
+    it('update는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [],
+      });
+
+      await expect(
+        service.update(7, { id: 99 } as any, { content: 'updated' } as any),
+      ).rejects.toThrow('게시글 수정 권한이 없습니다.');
+    });
+
+    it('update는 최종 이미지 개수가 3개를 넘으면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({
+        id: 7,
+        memberId: 10,
+        images: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      });
+
+      await expect(
+        service.update(
+          7,
+          { id: 10 } as any,
+          { content: 'updated' } as any,
+          [{ originalname: '1.png' }] as any,
+        ),
+      ).rejects.toThrow('이미지는 최대 3개까지 유지할 수 있습니다.');
+    });
+
+    it('remove는 작성자 본인만 삭제할 수 있다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await service.remove(7, { id: 1 } as any);
       expect(postRepository.delete).toHaveBeenCalledWith(7);
+    });
+
+    it('remove는 작성자가 아니면 예외를 던진다', async () => {
+      postRepository.findOne.mockResolvedValue({ id: 7, memberId: 1 });
+
+      await expect(service.remove(7, { id: 2 } as any)).rejects.toThrow(
+        '게시글 삭제 권한이 없습니다.',
+      );
+    });
+
+    it('remove는 게시글이 없으면 NotFoundException을 던진다', async () => {
+      postRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.remove(999, { id: 1 } as any)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

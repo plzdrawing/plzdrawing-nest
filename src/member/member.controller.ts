@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Patch,
+  ParseIntPipe,
   Post,
   Query,
   UploadedFile,
@@ -27,6 +29,10 @@ import { UpsertProfileDto } from './dto/upsert-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfileInfoResponse } from './dto/profile-info-response.dto';
 import { NicknameAvailabilityResponseDto } from './dto/nickname-availability-response.dto';
+import { PublicProfileResponseDto } from './dto/public-profile-response.dto';
+import { PublicReviewListResponseDto } from './dto/public-review-list-response.dto';
+import { PublicReviewSummaryResponseDto } from './dto/public-review-summary-response.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Member')
 @Controller('member')
@@ -70,6 +76,7 @@ export class MemberController {
           type: 'string',
         },
         hashTag: {
+          description: '관심 태그 목록(선택), 최대 5개. 각 태그는 #으로 시작',
           type: 'array',
           items: {
             type: 'string',
@@ -122,6 +129,7 @@ export class MemberController {
           type: 'string',
         },
         hashTag: {
+          description: '관심 태그 목록(선택), 최대 5개. 각 태그는 #으로 시작',
           type: 'array',
           items: {
             type: 'string',
@@ -149,6 +157,49 @@ export class MemberController {
   })
   async getMyProfile(@GetUser() member: Member): Promise<ProfileInfoResponse> {
     return this.memberService.getMyProfile(member.id);
+  }
+
+  @Get('v1/profile/:memberId')
+  @ApiOperation({ summary: '공개 프로필 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '공개 프로필 조회 성공',
+    type: PublicProfileResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicProfile(
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ): Promise<PublicProfileResponseDto> {
+    return this.memberService.getPublicProfile(memberId);
+  }
+
+  @Get('v1/profile/:memberId/reviews')
+  @ApiOperation({ summary: '공개 프로필 후기 목록 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '후기 목록 조회 성공',
+    type: PublicReviewListResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicReviews(
+    @Param('memberId', ParseIntPipe) memberId: number,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PublicReviewListResponseDto> {
+    return this.memberService.getPublicReviews(memberId, paginationDto);
+  }
+
+  @Get('v1/profile/:memberId/reviews/summary')
+  @ApiOperation({ summary: '공개 프로필 후기 요약 조회' })
+  @ApiResponse({
+    status: 200,
+    description: '후기 요약 조회 성공',
+    type: PublicReviewSummaryResponseDto,
+  })
+  @ApiResponse({ status: 404, description: '회원을 찾을 수 없음' })
+  async getPublicReviewSummary(
+    @Param('memberId', ParseIntPipe) memberId: number,
+  ): Promise<PublicReviewSummaryResponseDto> {
+    return this.memberService.getPublicReviewSummary(memberId);
   }
 
   @Get('check-nickname')

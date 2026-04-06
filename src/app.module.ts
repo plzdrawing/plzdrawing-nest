@@ -21,6 +21,7 @@ import { WithdrawAccountModule } from './withdraw-account/withdraw-account.modul
 import { WithdrawModule } from './withdraw/withdraw.module';
 import { AppInitModule } from './app-init/app-init.module';
 import { createTypeOrmOptions } from './database/typeorm.config';
+import { ScrapModule } from './scrap/scrap.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { createTypeOrmOptions } from './database/typeorm.config';
     WithdrawAccountModule,
     WithdrawModule,
     AppInitModule,
+    ScrapModule,
   ],
   controllers: [AppController],
   providers: [AppService],

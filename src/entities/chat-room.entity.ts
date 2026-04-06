@@ -36,6 +36,9 @@ export class ChatRoom extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ name: 'reference_image_object_keys', type: 'json', nullable: true })
+  referenceImageObjectKeys: string[];
+
   @Column({ nullable: true })
   price: number;
 
