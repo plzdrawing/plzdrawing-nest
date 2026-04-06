@@ -229,6 +229,23 @@ export class WithdrawAccountService {
     return accounts.map((account) => this.mapAccount(account));
   }
 
+  async findOneForAdmin(
+    member: Member,
+    accountId: number,
+  ): Promise<WithdrawAccountResponseDto> {
+    this.assertAdmin(member);
+
+    const account = await this.withdrawAccountRepository.findOne({
+      where: { id: accountId },
+      relations: ['member', 'member.profile'],
+    });
+    if (!account) {
+      throw new NotFoundException('Withdraw account not found');
+    }
+
+    return this.mapAccount(account);
+  }
+
   async verifyByAdmin(
     member: Member,
     accountId: number,

@@ -120,6 +120,22 @@ export class WithdrawAccountController {
     return this.withdrawAccountService.findAllForAdmin(member, query);
   }
 
+  @Get('withdraw-accounts/v1/admin/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: '환전계좌 상세 조회 (관리자)' })
+  @ApiResponse({
+    status: 200,
+    description: '환전계좌 상세 조회 성공',
+    type: WithdrawAccountResponseDto,
+  })
+  async findOneForAdmin(
+    @GetUser() member: Member,
+    @Param('id') id: string,
+  ): Promise<WithdrawAccountResponseDto> {
+    return this.withdrawAccountService.findOneForAdmin(member, +id);
+  }
+
   @Patch('withdraw-accounts/v1/admin/:id/verify')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')

@@ -249,6 +249,38 @@ describe('WithdrawAccountService', () => {
       expect(result[0].memberNickname).toBe('그림좋아');
     });
   });
+
+  describe('findOneForAdmin', () => {
+    it('관리자는 환전계좌 상세를 조회할 수 있다', async () => {
+      withdrawAccountRepository.findOne.mockResolvedValue({
+        id: 1,
+        memberId: 10,
+        bankCode: '004',
+        bankName: '국민은행',
+        accountHolder: '홍길동',
+        accountNumberMasked: '123456******34',
+        member: {
+          id: 10,
+          nickname: '그림좋아',
+          email: 'user@example.com',
+          profile: {
+            profileUrl: 'https://cdn.example.com/profile.png',
+          },
+        },
+        isPrimary: true,
+        status: WithdrawAccountStatus.ACTIVE,
+        verifiedAt: new Date('2026-04-05T00:00:00.000Z'),
+        createdAt: new Date('2026-04-05T00:00:00.000Z'),
+      });
+
+      const result = await service.findOneForAdmin(
+        { role: MemberRole.ROLE_ADMIN } as Member,
+        1,
+      );
+
+      expect(result.memberNickname).toBe('그림좋아');
+    });
+  });
 });
 
 function encryptAccountNumber(secret: string, accountNumber: string): string {
