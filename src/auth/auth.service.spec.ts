@@ -5,6 +5,7 @@ import { MemberService } from '../member/member.service';
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { MemberProvider, MemberRole, MemberStatus } from '../common/enums';
+import { AuthTokenBlacklistService } from './auth-token-blacklist.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -16,6 +17,10 @@ describe('AuthService', () => {
 
   const mockJwtService = {
     sign: jest.fn(),
+  };
+
+  const mockAuthTokenBlacklistService = {
+    blacklistAccessToken: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -31,6 +36,10 @@ describe('AuthService', () => {
         {
           provide: JwtService,
           useValue: mockJwtService,
+        },
+        {
+          provide: AuthTokenBlacklistService,
+          useValue: mockAuthTokenBlacklistService,
         },
       ],
     }).compile();
@@ -158,8 +167,14 @@ describe('AuthService', () => {
   });
 
   describe('logout', () => {
-    it('성공 응답을 반환한다', () => {
-      expect(service.logout()).toEqual({ success: true });
+    it('access token을 블랙리스트에 등록한다', async () => {
+      await expect(service.logout('Bearer token')).resolves.toEqual({
+        success: true,
+      });
+
+      expect(
+        mockAuthTokenBlacklistService.blacklistAccessToken,
+      ).toHaveBeenCalledWith('Bearer token');
     });
   });
 

@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { MemberService } from '../member/member.service';
 import { Member } from '../entities/member.entity';
 import { MemberProvider, MemberRole, MemberStatus } from '../common/enums';
+import { AuthTokenBlacklistService } from './auth-token-blacklist.service';
 
 export type AuthenticatedMember = Omit<Member, 'password'>;
 
@@ -19,6 +20,7 @@ export class AuthService {
   constructor(
     private readonly memberService: MemberService,
     private readonly jwtService: JwtService,
+    private readonly authTokenBlacklistService: AuthTokenBlacklistService,
   ) {}
 
   async validateUser(
@@ -58,7 +60,8 @@ export class AuthService {
     });
   }
 
-  logout(): { success: boolean } {
+  async logout(authorization?: string): Promise<{ success: boolean }> {
+    await this.authTokenBlacklistService.blacklistAccessToken(authorization);
     return { success: true };
   }
 

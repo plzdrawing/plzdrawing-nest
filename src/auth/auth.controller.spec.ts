@@ -94,8 +94,12 @@ describe('AuthController', () => {
   it('logout은 authService.logout 결과를 반환한다', () => {
     mockAuthService.logout.mockReturnValue({ success: true });
 
-    expect(controller.logout()).toEqual({ success: true });
-    expect(mockAuthService.logout).toHaveBeenCalled();
+    expect(
+      controller.logout({
+        headers: { authorization: 'Bearer token' },
+      } as any),
+    ).resolves.toEqual({ success: true });
+    expect(mockAuthService.logout).toHaveBeenCalledWith('Bearer token');
   });
 
   it('googleAuthRedirect는 토큰 발급 후 프론트 콜백으로 리다이렉트한다', async () => {

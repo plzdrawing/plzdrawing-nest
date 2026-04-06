@@ -102,8 +102,8 @@ export class AuthController {
     description: '로그아웃 처리 성공',
     type: LogoutResponseDto,
   })
-  logout(): LogoutResponseDto {
-    const result = this.authService.logout();
+  async logout(@Req() req: Request): Promise<LogoutResponseDto> {
+    const result = await this.authService.logout(req.headers.authorization);
     return new LogoutResponseDto(result.success);
   }
 
