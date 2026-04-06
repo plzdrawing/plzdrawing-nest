@@ -76,7 +76,14 @@ export class MemberService {
   }
 
   async findByEmail(email: string): Promise<Member | null> {
-    return await this.memberRepository.findOne({ where: { email } });
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail) {
+      return null;
+    }
+
+    return await this.memberRepository.findOne({
+      where: { email: normalizedEmail },
+    });
   }
 
   async findById(id: number): Promise<Member | null> {

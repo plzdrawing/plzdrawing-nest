@@ -121,7 +121,7 @@ describe('MemberService', () => {
       .mockResolvedValueOnce({ id: 2 })
       .mockResolvedValueOnce({ id: 3 });
 
-    await expect(service.findByEmail('a@test.com')).resolves.toEqual({
+    await expect(service.findByEmail(' A@test.com ')).resolves.toEqual({
       id: 1,
       email: 'a@test.com',
     });
@@ -130,7 +130,15 @@ describe('MemberService', () => {
       id: 3,
     });
 
+    expect(memberRepository.findOne).toHaveBeenNthCalledWith(1, {
+      where: { email: 'a@test.com' },
+    });
     expect(memberRepository.update).toHaveBeenCalledWith(3, { nickname: 'n' });
+  });
+
+  it('findByEmail는 비어 있는 이메일이면 null을 반환한다', async () => {
+    await expect(service.findByEmail('   ')).resolves.toBeNull();
+    expect(memberRepository.findOne).not.toHaveBeenCalled();
   });
 
   describe('uploadProfile', () => {
