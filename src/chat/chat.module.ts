@@ -6,10 +6,19 @@ import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
 import { PaymentHistory } from '../entities/payment-history.entity';
+import { Wallet } from '../entities/wallet.entity';
+import { WalletTransaction } from '../entities/wallet-transaction.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatRoom, Message, Post, PaymentHistory]),
+    TypeOrmModule.forFeature([
+      ChatRoom,
+      Message,
+      Post,
+      PaymentHistory,
+      Wallet,
+      WalletTransaction,
+    ]),
   ],
   controllers: [ChatController],
   providers: [ChatService],

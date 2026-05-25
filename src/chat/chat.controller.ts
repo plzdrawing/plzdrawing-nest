@@ -473,7 +473,7 @@ export class ChatController {
   @ApiOperation({
     summary: '결제 (요청자)',
     description:
-      'ACCEPTED 상태에서 결제를 진행하고 PAID 상태로 전환합니다. PaymentHistory가 생성됩니다.',
+      'ACCEPTED 상태에서 요청자 코인을 차감하고 작가에게 지급한 뒤 PAID 상태로 전환합니다. 지갑 거래내역과 PaymentHistory가 함께 생성됩니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
   @ApiBody({ type: PayChatDto })
@@ -482,16 +482,19 @@ export class ChatController {
     description: '결제 성공 — feedbackCount 반환',
     type: PayChatResponseDto,
   })
-  @ApiResponse({ status: 400, description: '잘못된 상태 또는 금액 미설정' })
+  @ApiResponse({
+    status: 400,
+    description: '잘못된 상태, 금액 미설정 또는 코인 잔액 부족',
+  })
   @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 403, description: '권한 없음 (요청자만 가능)' })
   @ApiResponse({ status: 404, description: '채팅방 없음' })
   async payChatRoom(
     @GetUser() member: Member,
     @Param('id') id: string,
-    @Body() dto: PayChatDto,
+    @Body() _dto: PayChatDto,
   ): Promise<PayChatResponseDto> {
-    return this.chatService.payChatRoom(member, +id, dto);
+    return this.chatService.payChatRoom(member, +id);
   }
 
   @Patch(':id/start')

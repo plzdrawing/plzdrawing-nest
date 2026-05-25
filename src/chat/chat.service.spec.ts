@@ -5,11 +5,14 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import { ChatService } from './chat.service';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
 import { PaymentHistory } from '../entities/payment-history.entity';
+import { Wallet } from '../entities/wallet.entity';
+import { WalletTransaction } from '../entities/wallet-transaction.entity';
 import { AwsService } from '../common/aws/aws.service';
 import {
   ChatRoomStatus,
@@ -17,7 +20,8 @@ import {
   MemberRole,
   MemberStatus,
   MessageType,
-  PaymentMethod,
+  WalletTransactionStatus,
+  WalletTransactionType,
 } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
@@ -34,7 +38,13 @@ describe('ChatService', () => {
   let chatRoomRepository: any;
   let messageRepository: any;
   let postRepository: any;
-  let paymentHistoryRepository: any;
+  let dataSource: any;
+  let queryRunner: any;
+  let txChatRoomRepository: any;
+  let txMessageRepository: any;
+  let txPaymentHistoryRepository: any;
+  let txWalletRepository: any;
+  let txWalletTransactionRepository: any;
   let awsService: any;
 
   const requester: Member = {
@@ -116,9 +126,55 @@ describe('ChatService', () => {
       findOne: jest.fn(),
     };
 
-    paymentHistoryRepository = {
+    txChatRoomRepository = {
+      findOne: jest.fn(),
+      save: jest.fn(),
+      update: jest.fn(),
+    };
+
+    txMessageRepository = {
       create: jest.fn(),
       save: jest.fn(),
+    };
+
+    txPaymentHistoryRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
+    txWalletRepository = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
+    txWalletTransactionRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+
+    queryRunner = {
+      connect: jest.fn(),
+      startTransaction: jest.fn(),
+      commitTransaction: jest.fn(),
+      rollbackTransaction: jest.fn(),
+      release: jest.fn(),
+      manager: {
+        getRepository: jest.fn((entity: unknown) => {
+          if (entity === ChatRoom) return txChatRoomRepository;
+          if (entity === Message) return txMessageRepository;
+          if (entity === PaymentHistory) return txPaymentHistoryRepository;
+          if (entity === Wallet) return txWalletRepository;
+          if (entity === WalletTransaction) {
+            return txWalletTransactionRepository;
+          }
+          throw new Error('Unexpected transaction repository');
+        }),
+      },
+    };
+
+    dataSource = {
+      createQueryRunner: jest.fn(() => queryRunner),
     };
 
     awsService = {
@@ -141,10 +197,7 @@ describe('ChatService', () => {
           provide: getRepositoryToken(Post),
           useValue: postRepository,
         },
-        {
-          provide: getRepositoryToken(PaymentHistory),
-          useValue: paymentHistoryRepository,
-        },
+        { provide: DataSource, useValue: dataSource },
         {
           provide: AwsService,
           useValue: awsService,
@@ -358,7 +411,7 @@ describe('ChatService', () => {
 
   describe('workflow state transitions', () => {
     it('요청자는 수락 이전에 결제 상태로 건너뛸 수 없다', async () => {
-      chatRoomRepository.findOne.mockResolvedValue({
+      txChatRoomRepository.findOne.mockResolvedValue({
         id: 1,
         requesterId: requester.id,
         artistId: artist.id,
@@ -366,14 +419,13 @@ describe('ChatService', () => {
         price: 5000,
       } as ChatRoom);
 
-      await expect(
-        service.payChatRoom(requester, 1, {
-          paymentMethod: PaymentMethod.CREDIT_CARD,
-        }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.payChatRoom(requester, 1)).rejects.toThrow(
+        BadRequestException,
+      );
 
-      expect(chatRoomRepository.save).not.toHaveBeenCalled();
-      expect(paymentHistoryRepository.save).not.toHaveBeenCalled();
+      expect(txChatRoomRepository.save).not.toHaveBeenCalled();
+      expect(txPaymentHistoryRepository.save).not.toHaveBeenCalled();
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
     it('작가는 결제 완료 이전에 작업을 시작할 수 없다', async () => {
@@ -404,6 +456,120 @@ describe('ChatService', () => {
       );
 
       expect(chatRoomRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('payChatRoom', () => {
+    const acceptedRoom = {
+      id: 20,
+      requesterId: requester.id,
+      artistId: artist.id,
+      status: ChatRoomStatus.ACCEPTED,
+      price: 5000,
+      estimatedAt: new Date('2026-03-01T00:00:00.000Z'),
+      feedbackCount: 2,
+    } as ChatRoom;
+
+    it('코인 이동과 결제 상태를 하나의 트랜잭션으로 커밋한다', async () => {
+      const requesterWallet = { memberId: requester.id, balance: 7000 };
+      const artistWallet = { memberId: artist.id, balance: 1000 };
+      txChatRoomRepository.findOne.mockResolvedValue({ ...acceptedRoom });
+      txWalletRepository.findOne
+        .mockResolvedValueOnce(requesterWallet)
+        .mockResolvedValueOnce(artistWallet);
+      txPaymentHistoryRepository.create.mockImplementation(
+        (payload: any) => payload,
+      );
+      txWalletTransactionRepository.create.mockImplementation(
+        (payload: any) => payload,
+      );
+      txMessageRepository.create.mockImplementation((payload: any) => payload);
+
+      const result = await service.payChatRoom(requester, acceptedRoom.id);
+
+      expect(txChatRoomRepository.findOne).toHaveBeenCalledWith({
+        where: { id: acceptedRoom.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(txWalletRepository.save).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ memberId: requester.id, balance: 2000 }),
+      );
+      expect(txWalletRepository.save).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ memberId: artist.id, balance: 6000 }),
+      );
+      expect(txPaymentHistoryRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          senderId: requester.id,
+          receiverId: artist.id,
+          amount: acceptedRoom.price,
+          method: null,
+          chatRoomId: acceptedRoom.id,
+        }),
+      );
+      expect(txWalletTransactionRepository.save).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            memberId: requester.id,
+            type: WalletTransactionType.USE,
+            coinAmount: -acceptedRoom.price,
+            status: WalletTransactionStatus.COMPLETED,
+          }),
+          expect.objectContaining({
+            memberId: artist.id,
+            type: WalletTransactionType.EARN,
+            coinAmount: acceptedRoom.price,
+            status: WalletTransactionStatus.COMPLETED,
+          }),
+        ]),
+      );
+      expect(txChatRoomRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: ChatRoomStatus.PAID,
+          paidAmount: acceptedRoom.price,
+        }),
+      );
+      expect(queryRunner.commitTransaction).toHaveBeenCalled();
+      expect(queryRunner.rollbackTransaction).not.toHaveBeenCalled();
+      expect(result).toEqual({ feedbackCount: acceptedRoom.feedbackCount });
+    });
+
+    it('요청자 코인 잔액이 부족하면 결제를 롤백한다', async () => {
+      txChatRoomRepository.findOne.mockResolvedValue({ ...acceptedRoom });
+      txWalletRepository.findOne.mockResolvedValueOnce({
+        memberId: requester.id,
+        balance: 4999,
+      });
+
+      await expect(
+        service.payChatRoom(requester, acceptedRoom.id),
+      ).rejects.toThrow('Insufficient coin balance');
+
+      expect(txWalletRepository.save).not.toHaveBeenCalled();
+      expect(txPaymentHistoryRepository.save).not.toHaveBeenCalled();
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('결제 이력 저장이 실패하면 모든 변경을 롤백한다', async () => {
+      txChatRoomRepository.findOne.mockResolvedValue({ ...acceptedRoom });
+      txWalletRepository.findOne
+        .mockResolvedValueOnce({ memberId: requester.id, balance: 7000 })
+        .mockResolvedValueOnce({ memberId: artist.id, balance: 1000 });
+      txPaymentHistoryRepository.create.mockImplementation(
+        (payload: any) => payload,
+      );
+      txPaymentHistoryRepository.save.mockRejectedValue(
+        new Error('payment history failed'),
+      );
+
+      await expect(
+        service.payChatRoom(requester, acceptedRoom.id),
+      ).rejects.toThrow('payment history failed');
+
+      expect(queryRunner.rollbackTransaction).toHaveBeenCalled();
+      expect(queryRunner.commitTransaction).not.toHaveBeenCalled();
     });
   });
 

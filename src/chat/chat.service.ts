@@ -6,19 +6,23 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Brackets, Repository, Not } from 'typeorm';
+import { Brackets, DataSource, Repository, Not } from 'typeorm';
 import * as path from 'path';
 import { ChatRoom } from '../entities/chat-room.entity';
 import { Message } from '../entities/message.entity';
 import { Post } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
 import { PaymentHistory } from '../entities/payment-history.entity';
+import { Wallet } from '../entities/wallet.entity';
+import { WalletTransaction } from '../entities/wallet-transaction.entity';
 import { AwsService } from '../common/aws/aws.service';
 import {
   ChatRoomStatus,
   MessageType,
   PaymentStatus,
   PaymentType,
+  WalletTransactionStatus,
+  WalletTransactionType,
 } from '../common/enums';
 import {
   CHAT_IMAGE_ALLOWED_CONTENT_TYPES,
@@ -45,7 +49,6 @@ import { MessageListResponseDto } from './dto/message-list-response.dto';
 import { AcceptChatDto } from './dto/accept-chat.dto';
 import { RejectChatDto } from './dto/reject-chat.dto';
 import { RequestPriceChangeDto } from './dto/request-price-change.dto';
-import { PayChatDto } from './dto/pay-chat.dto';
 import { PayChatResponseDto } from './dto/pay-chat-response.dto';
 import { SendDrawingDto } from './dto/send-drawing.dto';
 import { SendDrawingResponseDto } from './dto/send-drawing-response.dto';
@@ -61,8 +64,7 @@ export class ChatService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(Post)
     private readonly postRepository: Repository<Post>,
-    @InjectRepository(PaymentHistory)
-    private readonly paymentHistoryRepository: Repository<PaymentHistory>,
+    private readonly dataSource: DataSource,
     private readonly awsService: AwsService,
   ) {}
 
@@ -548,47 +550,126 @@ export class ChatService {
   async payChatRoom(
     member: Member,
     chatRoomId: number,
-    dto: PayChatDto,
   ): Promise<PayChatResponseDto> {
-    const chatRoom = await this.loadChatRoomWithRelations(chatRoomId);
-    if (chatRoom.requesterId !== member.id) {
-      throw new ForbiddenException('Only the requester can pay');
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const chatRoomRepository = queryRunner.manager.getRepository(ChatRoom);
+      const walletRepository = queryRunner.manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        queryRunner.manager.getRepository(WalletTransaction);
+      const paymentHistoryRepository =
+        queryRunner.manager.getRepository(PaymentHistory);
+      const messageRepository = queryRunner.manager.getRepository(Message);
+
+      const chatRoom = await chatRoomRepository.findOne({
+        where: { id: chatRoomId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!chatRoom) {
+        throw new NotFoundException('Chat room not found');
+      }
+      if (chatRoom.requesterId !== member.id) {
+        throw new ForbiddenException('Only the requester can pay');
+      }
+      if (chatRoom.status !== ChatRoomStatus.ACCEPTED) {
+        throw new BadRequestException('Chat room is not in ACCEPTED status');
+      }
+      if (!chatRoom.price) {
+        throw new BadRequestException('Price is not set');
+      }
+
+      const requesterWallet = await walletRepository.findOne({
+        where: { memberId: chatRoom.requesterId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!requesterWallet || requesterWallet.balance < chatRoom.price) {
+        throw new BadRequestException('Insufficient coin balance');
+      }
+
+      let artistWallet = await walletRepository.findOne({
+        where: { memberId: chatRoom.artistId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!artistWallet) {
+        artistWallet = walletRepository.create({
+          memberId: chatRoom.artistId,
+          balance: 0,
+        });
+      }
+
+      requesterWallet.balance -= chatRoom.price;
+      artistWallet.balance += chatRoom.price;
+      await walletRepository.save(requesterWallet);
+      await walletRepository.save(artistWallet);
+
+      chatRoom.status = ChatRoomStatus.PAID;
+      chatRoom.paidAmount = chatRoom.price;
+      await chatRoomRepository.save(chatRoom);
+
+      await paymentHistoryRepository.save(
+        paymentHistoryRepository.create({
+          senderId: chatRoom.requesterId,
+          receiverId: chatRoom.artistId,
+          amount: chatRoom.price,
+          method: null,
+          status: PaymentStatus.COMPLETED,
+          type: PaymentType.SEND,
+          chatRoomId,
+        }),
+      );
+
+      await walletTransactionRepository.save([
+        walletTransactionRepository.create({
+          memberId: chatRoom.requesterId,
+          type: WalletTransactionType.USE,
+          coinAmount: -chatRoom.price,
+          cashAmount: null,
+          status: WalletTransactionStatus.COMPLETED,
+          description: `${chatRoom.price}코인 의뢰 결제`,
+          sourceType: 'CHAT_PAYMENT',
+          sourceId: chatRoom.id,
+        }),
+        walletTransactionRepository.create({
+          memberId: chatRoom.artistId,
+          type: WalletTransactionType.EARN,
+          coinAmount: chatRoom.price,
+          cashAmount: null,
+          status: WalletTransactionStatus.COMPLETED,
+          description: `${chatRoom.price}코인 작업 수익`,
+          sourceType: 'CHAT_PAYMENT',
+          sourceId: chatRoom.id,
+        }),
+      ]);
+
+      const estimatedAtStr = chatRoom.estimatedAt
+        ? new Date(chatRoom.estimatedAt).toISOString().slice(0, 10)
+        : '';
+      await messageRepository.save(
+        messageRepository.create({
+          chatRoomId,
+          senderId: member.id,
+          type: MessageType.SYSTEM,
+          content: JSON.stringify({
+            kind: 'PAYMENT_COMPLETED',
+            paidAmount: chatRoom.paidAmount,
+            estimatedAt: estimatedAtStr,
+            requesterNickname: member.nickname,
+          }),
+        }),
+      );
+      await chatRoomRepository.update(chatRoomId, { updatedAt: new Date() });
+
+      await queryRunner.commitTransaction();
+      return { feedbackCount: chatRoom.feedbackCount };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-    if (chatRoom.status !== ChatRoomStatus.ACCEPTED) {
-      throw new BadRequestException('Chat room is not in ACCEPTED status');
-    }
-    if (!chatRoom.price) {
-      throw new BadRequestException('Price is not set');
-    }
-
-    chatRoom.status = ChatRoomStatus.PAID;
-    chatRoom.paidAmount = chatRoom.price;
-    await this.chatRoomRepository.save(chatRoom);
-
-    await this.paymentHistoryRepository.save(
-      this.paymentHistoryRepository.create({
-        senderId: chatRoom.requesterId,
-        receiverId: chatRoom.artistId,
-        amount: chatRoom.price,
-        method: dto.paymentMethod,
-        status: PaymentStatus.COMPLETED,
-        type: PaymentType.SEND,
-        chatRoomId,
-      }),
-    );
-
-    const estimatedAtStr = chatRoom.estimatedAt
-      ? new Date(chatRoom.estimatedAt).toISOString().slice(0, 10)
-      : '';
-    await this.createSystemMessage(chatRoomId, member.id, {
-      kind: 'PAYMENT_COMPLETED',
-      paidAmount: chatRoom.paidAmount,
-      estimatedAt: estimatedAtStr,
-      requesterNickname: member.nickname,
-    });
-    await this.touchChatRoom(chatRoomId);
-
-    return { feedbackCount: chatRoom.feedbackCount };
   }
 
   // ── 작업 시작 (PAID → IN_PROGRESS) ───────────────────────────────────────

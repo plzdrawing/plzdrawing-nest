@@ -221,6 +221,12 @@ describe('WithdrawService', () => {
 
       const result = await service.create(1, { coinAmount: 10 });
 
+      expect(
+        queryRunner.manager.getRepository(Wallet).findOne,
+      ).toHaveBeenCalledWith({
+        where: { memberId: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
       expect(wallet.balance).toBe(90);
       expect(result.cashAmount).toBe(500);
       expect(result.feeAmount).toBe(500);
@@ -271,6 +277,12 @@ describe('WithdrawService', () => {
         { status: WithdrawRequestStatus.REJECTED, reason: '반려' },
       );
 
+      expect(
+        queryRunner.manager.getRepository(Wallet).findOne,
+      ).toHaveBeenCalledWith({
+        where: { memberId: 1 },
+        lock: { mode: 'pessimistic_write' },
+      });
       expect(wallet.balance).toBe(100);
       expect(result.status).toBe(WithdrawRequestStatus.REJECTED);
       expect(result.reason).toBe('반려');

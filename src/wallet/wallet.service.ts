@@ -294,6 +294,7 @@ export class WalletService {
 
       let wallet = await walletRepository.findOne({
         where: { memberId },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!wallet) {
         wallet = walletRepository.create({
@@ -482,7 +483,10 @@ export class WalletService {
         throw new BadRequestException('Payment key is missing');
       }
 
-      const wallet = await walletRepository.findOne({ where: { memberId } });
+      const wallet = await walletRepository.findOne({
+        where: { memberId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!wallet) {
         throw new NotFoundException('Wallet not found');
       }
