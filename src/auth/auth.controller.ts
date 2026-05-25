@@ -49,8 +49,11 @@ export class AuthController {
     status: 400,
     description: '잘못된 요청 (유효성 검사 실패 등)',
   })
-  async register(@Body() createMemberDto: CreateMemberDto) {
-    return this.authService.register(createMemberDto);
+  async register(
+    @Body() createMemberDto: CreateMemberDto,
+  ): Promise<MemberResponseDto> {
+    const member = await this.authService.register(createMemberDto);
+    return new MemberResponseDto(member);
   }
 
   @Post('login')
@@ -85,8 +88,8 @@ export class AuthController {
     description: '프로필 조회 성공',
     type: MemberResponseDto,
   })
-  getProfile(@Req() req: AuthRequest): Member {
-    return req.user;
+  getProfile(@Req() req: AuthRequest): MemberResponseDto {
+    return new MemberResponseDto(req.user);
   }
 
   @UseGuards(AuthGuard('jwt'))

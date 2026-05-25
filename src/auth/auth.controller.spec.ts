@@ -3,7 +3,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MemberRole } from '../common/enums';
+import { MemberProvider, MemberRole } from '../common/enums';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -49,12 +49,33 @@ describe('AuthController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('register는 authService.register에 위임한다', async () => {
+  it('register는 공개 회원 응답만 반환한다', async () => {
     const dto = { email: 'a@test.com', password: 'pw' } as any;
-    const expected = { id: 1 };
-    mockAuthService.register.mockResolvedValue(expected);
+    const createdAt = new Date('2026-05-25T01:00:00.000Z');
+    const member = {
+      id: 1,
+      email: 'a@test.com',
+      nickname: 'tester',
+      role: MemberRole.ROLE_MEMBER,
+      provider: MemberProvider.EMAIL,
+      password: 'hashed-password',
+      createdAt,
+      updatedAt: createdAt,
+    };
+    mockAuthService.register.mockResolvedValue(member);
 
-    await expect(controller.register(dto)).resolves.toEqual(expected);
+    const result = await controller.register(dto);
+
+    expect(result).toEqual({
+      id: 1,
+      email: 'a@test.com',
+      nickname: 'tester',
+      role: MemberRole.ROLE_MEMBER,
+      provider: MemberProvider.EMAIL,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    expect(result).not.toHaveProperty('password');
     expect(mockAuthService.register).toHaveBeenCalledWith(dto);
   });
 
@@ -86,9 +107,31 @@ describe('AuthController', () => {
     expect(mockAuthService.login).toHaveBeenCalledWith(user);
   });
 
-  it('getProfile은 req.user를 그대로 반환한다', () => {
-    const user = { id: 1, email: 'a@test.com' } as any;
-    expect(controller.getProfile({ user } as any)).toBe(user);
+  it('getProfile은 공개 회원 응답만 반환한다', () => {
+    const createdAt = new Date('2026-05-25T01:00:00.000Z');
+    const user = {
+      id: 1,
+      email: 'a@test.com',
+      nickname: 'tester',
+      role: MemberRole.ROLE_MEMBER,
+      provider: MemberProvider.EMAIL,
+      password: 'hashed-password',
+      createdAt,
+      updatedAt: createdAt,
+    } as any;
+
+    const result = controller.getProfile({ user } as any);
+
+    expect(result).toEqual({
+      id: 1,
+      email: 'a@test.com',
+      nickname: 'tester',
+      role: MemberRole.ROLE_MEMBER,
+      provider: MemberProvider.EMAIL,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    expect(result).not.toHaveProperty('password');
   });
 
   it('logout은 authService.logout 결과를 반환한다', () => {
