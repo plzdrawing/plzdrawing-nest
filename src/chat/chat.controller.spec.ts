@@ -5,7 +5,6 @@ import { ChatRoomStatus, MessageType } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
 import { ChatRoomListQueryDto } from './dto/chat-room-list-query.dto';
-import { UpdateChatRoomStatusDto } from './dto/update-chat-room-status.dto';
 import { MessageListQueryDto } from './dto/message-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ChatImageUploadRequestDto } from './dto/chat-image-upload-request.dto';
@@ -18,7 +17,6 @@ describe('ChatController', () => {
     getChatRooms: jest.Mock;
     getChatRoomDetail: jest.Mock;
     deleteChatRoom: jest.Mock;
-    updateChatRoomStatus: jest.Mock;
     getMessages: jest.Mock;
     sendMessage: jest.Mock;
     createImageUpload: jest.Mock;
@@ -32,7 +30,6 @@ describe('ChatController', () => {
       getChatRooms: jest.fn(),
       getChatRoomDetail: jest.fn(),
       deleteChatRoom: jest.fn(),
-      updateChatRoomStatus: jest.fn(),
       getMessages: jest.fn(),
       sendMessage: jest.fn(),
       createImageUpload: jest.fn(),
@@ -111,22 +108,6 @@ describe('ChatController', () => {
     await controller.deleteChatRoom(member, '30');
 
     expect(chatService.deleteChatRoom).toHaveBeenCalledWith(member, 30);
-  });
-
-  it('채팅방 상태 변경 시 식별자를 변환해 서비스로 전달해야 한다', async () => {
-    const member = { id: 1 } as Member;
-    const dto: UpdateChatRoomStatusDto = { status: ChatRoomStatus.IN_PROGRESS };
-    const expected = { chatRoomId: 2, status: ChatRoomStatus.IN_PROGRESS };
-    chatService.updateChatRoomStatus.mockResolvedValue(expected);
-
-    const result = await controller.updateChatRoomStatus(member, '2', dto);
-
-    expect(chatService.updateChatRoomStatus).toHaveBeenCalledWith(
-      member,
-      2,
-      dto,
-    );
-    expect(result).toEqual(expected);
   });
 
   it('메시지 목록 조회 시 식별자를 변환해 서비스로 전달해야 한다', async () => {

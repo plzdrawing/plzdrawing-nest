@@ -24,7 +24,6 @@ import { ChatService } from './chat.service';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { Member } from '../entities/member.entity';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
-import { UpdateChatRoomStatusDto } from './dto/update-chat-room-status.dto';
 import { ChatRoomListQueryDto } from './dto/chat-room-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ChatImageUploadRequestDto } from './dto/chat-image-upload-request.dto';
@@ -181,40 +180,6 @@ export class ChatController {
     @Param('id') id: string,
   ): Promise<void> {
     await this.chatService.deleteChatRoom(member, +id);
-  }
-
-  @Patch(':id/status')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: '채팅방 상태 변경',
-    description:
-      '채팅방 상태를 변경하고 시스템 메시지(STATUS_CHANGED)를 생성합니다.',
-  })
-  @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
-  @ApiBody({
-    type: UpdateChatRoomStatusDto,
-    examples: {
-      default: {
-        summary: '상태 변경 요청',
-        value: { status: 'IN_PROGRESS' },
-      },
-    },
-  })
-  @ApiResponse({
-    status: 200,
-    description: '채팅방 상태 변경 성공',
-    type: ChatRoomDetailResponseDto,
-  })
-  @ApiResponse({ status: 401, description: '인증 실패' })
-  @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
-  @ApiResponse({ status: 404, description: '채팅방을 찾을 수 없음' })
-  async updateChatRoomStatus(
-    @GetUser() member: Member,
-    @Param('id') id: string,
-    @Body() dto: UpdateChatRoomStatusDto,
-  ): Promise<ChatRoomDetailResponseDto> {
-    return this.chatService.updateChatRoomStatus(member, +id, dto);
   }
 
   @Get(':id/messages')

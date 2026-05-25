@@ -17,6 +17,7 @@ import {
   MemberRole,
   MemberStatus,
   MessageType,
+  PaymentMethod,
 } from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
@@ -352,6 +353,57 @@ describe('ChatService', () => {
 
       expect(messageRepository.delete).toHaveBeenCalledWith({ chatRoomId: 1 });
       expect(chatRoomRepository.delete).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('workflow state transitions', () => {
+    it('요청자는 수락 이전에 결제 상태로 건너뛸 수 없다', async () => {
+      chatRoomRepository.findOne.mockResolvedValue({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        status: ChatRoomStatus.REQUESTED,
+        price: 5000,
+      } as ChatRoom);
+
+      await expect(
+        service.payChatRoom(requester, 1, {
+          paymentMethod: PaymentMethod.CREDIT_CARD,
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(chatRoomRepository.save).not.toHaveBeenCalled();
+      expect(paymentHistoryRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('작가는 결제 완료 이전에 작업을 시작할 수 없다', async () => {
+      chatRoomRepository.findOne.mockResolvedValue({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        status: ChatRoomStatus.ACCEPTED,
+      } as ChatRoom);
+
+      await expect(service.startWork(artist, 1)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(chatRoomRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('요청자는 그림 전달 이전에 작업을 완료 처리할 수 없다', async () => {
+      chatRoomRepository.findOne.mockResolvedValue({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        status: ChatRoomStatus.IN_PROGRESS,
+      } as ChatRoom);
+
+      await expect(service.confirmDrawing(requester, 1)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(chatRoomRepository.save).not.toHaveBeenCalled();
     });
   });
 
