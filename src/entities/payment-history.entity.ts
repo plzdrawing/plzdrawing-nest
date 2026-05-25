@@ -30,7 +30,7 @@ export class PaymentHistory extends BaseEntity {
     enum: PaymentMethod,
     nullable: true,
   })
-  method: PaymentMethod;
+  method: PaymentMethod | null;
 
   @Column({
     type: 'enum',

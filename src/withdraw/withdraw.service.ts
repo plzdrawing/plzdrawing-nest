@@ -105,7 +105,10 @@ export class WithdrawService {
         );
       }
 
-      const wallet = await walletRepository.findOne({ where: { memberId } });
+      const wallet = await walletRepository.findOne({
+        where: { memberId },
+        lock: { mode: 'pessimistic_write' },
+      });
       if (!wallet || wallet.balance < dto.coinAmount) {
         throw new BadRequestException('Not enough coin balance');
       }
@@ -294,6 +297,7 @@ export class WithdrawService {
       if (dto.status === WithdrawRequestStatus.REJECTED) {
         const wallet = await walletRepository.findOne({
           where: { memberId: request.memberId },
+          lock: { mode: 'pessimistic_write' },
         });
         if (!wallet) {
           throw new NotFoundException('Wallet not found');

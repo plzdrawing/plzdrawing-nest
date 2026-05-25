@@ -281,6 +281,38 @@ describe('WalletService', () => {
     expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
   });
 
+  it('토스 승인 완료 시 지갑 행을 잠그고 코인을 충전해야 한다', async () => {
+    const order = createPendingOrder();
+
+    txCoinOrderRepository.findOne
+      .mockResolvedValueOnce(order)
+      .mockResolvedValueOnce(null);
+    tossPaymentsService.confirmPayment.mockResolvedValue({
+      paymentKey: 'payment-key',
+      orderId: order.orderCode,
+      totalAmount: order.amount,
+      status: 'DONE',
+    });
+    txWalletRepository.findOne.mockResolvedValue({
+      memberId: 1,
+      balance: 0,
+    });
+    txCoinOrderRepository.save.mockImplementation((data) =>
+      Promise.resolve(data),
+    );
+
+    await service.confirmCoinOrder(1, 1, {
+      paymentKey: 'payment-key',
+      amount: 1200,
+    });
+
+    expect(txWalletRepository.findOne).toHaveBeenCalledWith({
+      where: { memberId: 1 },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+  });
+
   it('토스 취소 응답이 CANCELED가 아니면 주문 취소를 막아야 한다', async () => {
     const order = createCompletedOrder();
 
@@ -302,6 +334,10 @@ describe('WalletService', () => {
       }),
     ).rejects.toThrow(BadRequestException);
 
+    expect(txWalletRepository.findOne).toHaveBeenCalledWith({
+      where: { memberId: 1 },
+      lock: { mode: 'pessimistic_write' },
+    });
     expect(txWalletRepository.save).not.toHaveBeenCalled();
     expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
   });
