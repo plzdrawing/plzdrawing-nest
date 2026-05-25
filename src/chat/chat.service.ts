@@ -27,7 +27,6 @@ import {
   MAX_CHAT_IMAGE_SIZE_BYTES,
 } from './chat.constants';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
-import { UpdateChatRoomStatusDto } from './dto/update-chat-room-status.dto';
 import { ChatRoomListQueryDto } from './dto/chat-room-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { MessageListQueryDto } from './dto/message-list-query.dto';
@@ -241,42 +240,6 @@ export class ChatService {
 
     await this.messageRepository.delete({ chatRoomId: chatRoom.id });
     await this.chatRoomRepository.delete(chatRoom.id);
-  }
-
-  async updateChatRoomStatus(
-    member: Member,
-    chatRoomId: number,
-    dto: UpdateChatRoomStatusDto,
-  ): Promise<ChatRoomDetailResponseDto> {
-    const chatRoom = await this.chatRoomRepository.findOne({
-      where: { id: chatRoomId },
-      relations: [
-        'post',
-        'requester',
-        'requester.profile',
-        'artist',
-        'artist.profile',
-      ],
-    });
-    if (!chatRoom) throw new NotFoundException('Chat room not found');
-    this.assertMember(chatRoom, member.id);
-
-    chatRoom.status = dto.status;
-    await this.chatRoomRepository.save(chatRoom);
-
-    const message = this.messageRepository.create({
-      chatRoomId: chatRoom.id,
-      senderId: member.id,
-      type: MessageType.SYSTEM,
-      content: JSON.stringify({
-        kind: 'STATUS_CHANGED',
-        status: dto.status,
-      }),
-    });
-    await this.messageRepository.save(message);
-    await this.touchChatRoom(chatRoom.id);
-
-    return this.mapChatRoomDetail(chatRoom);
   }
 
   async createImageUpload(
