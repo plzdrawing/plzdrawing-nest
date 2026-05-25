@@ -104,7 +104,13 @@ pnpm test
 
 ### Firebase
 
-- `FIREBASE_CONFIG_PATH`
+- `FIREBASE_CONFIG_PATH`: 로컬 또는 secret mount로 주입한 JSON 파일 경로
+- `FIREBASE_SERVICE_ACCOUNT_BASE64`: 런타임에 주입한 service account JSON의 base64 값
+
+참고:
+
+- 두 값 중 하나가 필요하며, 둘 다 있으면 `FIREBASE_SERVICE_ACCOUNT_BASE64`를 우선 사용합니다.
+- `firebase-service-account.json` 같은 실제 credential 파일은 저장소나 Docker 이미지에 포함하지 않습니다.
 
 ### 토스 결제
 
@@ -229,5 +235,6 @@ pnpm test
 - 로컬 개발은 `DB_SYNCHRONIZE=true`로 빠르게 맞출 수 있습니다.
 - 스테이징/운영은 `DB_SYNCHRONIZE=false`로 두고 마이그레이션 실행을 권장합니다.
 - `.env`에는 실제 비밀값을 직접 커밋하지 않는 것을 권장합니다.
+- Firebase credential은 Docker 이미지에 복사하지 않으며, 배포 환경에서 `FIREBASE_SERVICE_ACCOUNT_BASE64` 또는 secret mount 파일로 주입해야 합니다.
 - 로그아웃은 현재 서버 성공 응답 후 프론트에서 access token을 삭제하는 방식입니다.
 - 비활성 또는 탈퇴 회원은 일반 로그인, 소셜 로그인, JWT 인증 모두 차단됩니다.

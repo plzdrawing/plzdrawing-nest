@@ -6,3 +6,6 @@ Dockerfile
 .gitignore
 README.md
 test
+.env
+.env.*
+firebase-service-account.json

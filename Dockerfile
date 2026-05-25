@@ -32,9 +32,6 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy firebase config (Ensure this file exists or mount it as a volume)
-COPY firebase-service-account.json ./
-
 EXPOSE 3000
 
 CMD ["node", "dist/main"]
