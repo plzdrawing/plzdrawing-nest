@@ -34,10 +34,10 @@ import { ContentsPageResponseDto } from './dto/contents-page-response.dto';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { JwtOptionalAuthGuard } from '../auth/guards/jwt-optional-auth.guard';
 import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
-import { Post as PostEntity } from '../entities/post.entity';
 import { Member } from '../entities/member.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { PostDetailResponseDto } from './dto/post-detail-response.dto';
 
 type AuthRequest = ExpressRequest & { user: Member };
 
@@ -85,7 +85,7 @@ export class PostController {
   @ApiResponse({
     status: 201,
     description: '게시글 작성 성공',
-    type: PostEntity,
+    type: PostDetailResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -122,7 +122,7 @@ export class PostController {
     @Request() req: AuthRequest,
     @Body() body: CreatePostDto,
     @UploadedFiles() files: Array<Express.Multer.File>,
-  ) {
+  ): Promise<PostDetailResponseDto> {
     return this.postService.create(req.user, body, files);
   }
 
@@ -158,9 +158,13 @@ export class PostController {
 
   @Get(':id')
   @ApiOperation({ summary: '게시글 상세 조회' })
-  @ApiResponse({ status: 200, description: '게시글 상세 조회 성공' })
+  @ApiResponse({
+    status: 200,
+    description: '게시글 상세 조회 성공',
+    type: PostDetailResponseDto,
+  })
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string): Promise<PostDetailResponseDto> {
     return this.postService.findOne(+id);
   }
 
@@ -204,7 +208,11 @@ export class PostController {
       },
     },
   })
-  @ApiResponse({ status: 200, description: '게시글 수정 성공' })
+  @ApiResponse({
+    status: 200,
+    description: '게시글 수정 성공',
+    type: PostDetailResponseDto,
+  })
   @ApiResponse({ status: 400, description: '잘못된 요청' })
   @ApiResponse({ status: 403, description: '수정 권한 없음' })
   @ApiResponse({ status: 404, description: '게시글을 찾을 수 없음' })
@@ -213,7 +221,7 @@ export class PostController {
     @Param('id') id: string,
     @Body() body: UpdatePostDto,
     @UploadedFiles() files: { newImages?: Array<Express.Multer.File> },
-  ) {
+  ): Promise<PostDetailResponseDto> {
     return this.postService.update(+id, req.user, body, files?.newImages ?? []);
   }
 

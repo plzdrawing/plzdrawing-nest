@@ -23,6 +23,14 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { LatestContentsQueryDto } from './dto/latest-contents-query.dto';
 import { PostFeedQueryRepository } from './query/post-feed.query.repository';
 import { PostFeedMapper } from './mapper/post-feed.mapper';
+import {
+  PostDetailCommentDto,
+  PostDetailImageDto,
+  PostDetailMemberDto,
+  PostDetailPostTagDto,
+  PostDetailResponseDto,
+  PostDetailTagDto,
+} from './dto/post-detail-response.dto';
 
 const MAX_POST_IMAGE_COUNT = 3;
 
@@ -45,7 +53,7 @@ export class PostService {
     member: Member,
     data: CreatePostDto,
     files?: Array<Express.Multer.File>,
-  ): Promise<Post> {
+  ): Promise<PostDetailResponseDto> {
     const { hashTag, ...postData } = data;
 
     if (files && files.length > MAX_POST_IMAGE_COUNT) {
@@ -227,22 +235,24 @@ export class PostService {
     return this.postFeedQueryRepository.countDrawingsByMemberIds(memberIds);
   }
 
-  async findOne(id: number): Promise<Post> {
+  async findOne(id: number): Promise<PostDetailResponseDto> {
     const post = await this.postRepository.findOne({
       where: { id },
       relations: [
         'member',
+        'member.profile',
         'images',
         'postTags',
         'postTags.tag',
         'comments',
         'comments.member',
+        'comments.member.profile',
       ],
     });
     if (!post) {
       throw new NotFoundException(`Post with ID ${id} not found`);
     }
-    return post;
+    return this.toPostDetailResponse(post);
   }
 
   async update(
@@ -250,7 +260,7 @@ export class PostService {
     member: Member,
     data: UpdatePostDto,
     newFiles: Array<Express.Multer.File> = [],
-  ): Promise<Post> {
+  ): Promise<PostDetailResponseDto> {
     const post = await this.postRepository.findOne({
       where: { id },
       relations: ['images'],
@@ -373,6 +383,59 @@ export class PostService {
     }
 
     await this.postRepository.delete(id);
+  }
+
+  private toPostDetailResponse(post: Post): PostDetailResponseDto {
+    return new PostDetailResponseDto(
+      post.id,
+      post.memberId,
+      post.title ?? null,
+      post.category ?? null,
+      post.content ?? null,
+      post.timeTaken ?? null,
+      post.price ?? null,
+      post.thumbnailUrl ?? null,
+      post.createdAt,
+      post.updatedAt,
+      this.toPostDetailMember(post.member),
+      (post.images ?? []).map(
+        (image) =>
+          new PostDetailImageDto(
+            image.id,
+            image.postId,
+            image.imageUrl ?? null,
+          ),
+      ),
+      (post.postTags ?? []).map(
+        (postTag) =>
+          new PostDetailPostTagDto(
+            postTag.id,
+            postTag.postId,
+            postTag.tagId,
+            postTag.status ?? null,
+            new PostDetailTagDto(postTag.tag.id, postTag.tag.name ?? null),
+          ),
+      ),
+      (post.comments ?? []).map(
+        (comment) =>
+          new PostDetailCommentDto(
+            comment.id,
+            comment.postId,
+            comment.memberId,
+            comment.content ?? null,
+            comment.createdAt,
+            this.toPostDetailMember(comment.member),
+          ),
+      ),
+    );
+  }
+
+  private toPostDetailMember(member: Member): PostDetailMemberDto {
+    return new PostDetailMemberDto(
+      member.id,
+      member.nickname,
+      member.profile?.profileUrl ?? null,
+    );
   }
 
   private normalizeHashTags(tags: string[]): string[] {

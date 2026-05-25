@@ -12,6 +12,7 @@ import { DataSource } from 'typeorm';
 import { PostFeedQueryRepository } from './query/post-feed.query.repository';
 import { PostFeedMapper } from './mapper/post-feed.mapper';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { PostCategory, TagStatus } from '../common/enums';
 
 describe('PostService', () => {
   let service: PostService;
@@ -470,10 +471,80 @@ describe('PostService', () => {
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
     });
 
-    it('findOne은 게시글 상세를 반환한다', async () => {
-      postRepository.findOne.mockResolvedValue({ id: 1 });
+    it('findOne은 회원 내부 정보를 제외한 게시글 상세를 반환한다', async () => {
+      const now = new Date('2024-01-01T00:00:00Z');
+      postRepository.findOne.mockResolvedValue({
+        id: 1,
+        memberId: 10,
+        title: '제목',
+        category: PostCategory.DRAWING,
+        content: '상세 내용',
+        timeTaken: '30분',
+        price: 10000,
+        thumbnailUrl: 'thumbnail',
+        createdAt: now,
+        updatedAt: now,
+        member: {
+          id: 10,
+          nickname: 'writer',
+          email: 'hidden@example.com',
+          isDeleted: false,
+          profile: { profileUrl: 'writer-profile' },
+        },
+        images: [{ id: 2, postId: 1, imageUrl: 'image' }],
+        postTags: [
+          {
+            id: 3,
+            postId: 1,
+            tagId: 4,
+            status: TagStatus.ACTIVE,
+            tag: { id: 4, name: '태그', createdById: 99 },
+          },
+        ],
+        comments: [
+          {
+            id: 5,
+            postId: 1,
+            memberId: 20,
+            content: '댓글',
+            createdAt: now,
+            member: {
+              id: 20,
+              nickname: 'commenter',
+              email: 'comment-hidden@example.com',
+              isVerified: true,
+              profile: { profileUrl: 'comment-profile' },
+            },
+          },
+        ],
+      });
 
-      await expect(service.findOne(1)).resolves.toEqual({ id: 1 });
+      const result = await service.findOne(1);
+
+      expect(result.member).toEqual({
+        id: 10,
+        nickname: 'writer',
+        profileImageUrl: 'writer-profile',
+      });
+      expect(result.member).not.toHaveProperty('email');
+      expect(result.member).not.toHaveProperty('isDeleted');
+      expect(result.comments[0].member).toEqual({
+        id: 20,
+        nickname: 'commenter',
+        profileImageUrl: 'comment-profile',
+      });
+      expect(result.comments[0].member).not.toHaveProperty('email');
+      expect(result.comments[0].member).not.toHaveProperty('isVerified');
+      expect(result.postTags[0].tag).toEqual({ id: 4, name: '태그' });
+      expect(result.postTags[0].tag).not.toHaveProperty('createdById');
+      expect(postRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: expect.arrayContaining([
+            'member.profile',
+            'comments.member.profile',
+          ]),
+        }),
+      );
     });
 
     it('update는 작성자 본인 요청이면 수정 후 상세를 반환한다', async () => {
