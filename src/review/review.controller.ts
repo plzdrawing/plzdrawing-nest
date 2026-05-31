@@ -23,8 +23,12 @@ export class ReviewController {
 
   @Get()
   @UseGuards(JwtOptionalAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '후기 목록 조회' })
+  @ApiOperation({
+    summary: '후기 목록 조회',
+    description:
+      'Bearer 토큰은 선택입니다. 인증된 요청이면 내가 찜한 게시글 여부를 함께 계산합니다.',
+    security: [{ 'access-token': [] }, {}],
+  })
   @ApiResponse({
     status: 200,
     description: '후기 목록 조회 성공',
