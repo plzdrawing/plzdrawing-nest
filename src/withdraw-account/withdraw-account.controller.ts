@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -95,6 +97,7 @@ export class WithdrawAccountController {
   @Delete('withdraw-accounts/v1/:id')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '환전계좌 삭제' })
   @ApiResponse({ status: 204, description: '환전계좌 삭제 성공' })
   async remove(

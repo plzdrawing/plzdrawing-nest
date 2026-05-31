@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -111,6 +113,7 @@ export class TermsController {
   @Delete('v1/:id')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '약관 삭제 (관리자)' })
   @ApiResponse({ status: 204, description: '약관 삭제 성공' })
   async removeTerm(

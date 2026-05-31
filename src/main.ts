@@ -34,29 +34,33 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('PlzDrawing API')
-    .setDescription('PlzDrawing API 문서')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT token',
-        in: 'header',
-      },
-      'access-token',
-    )
-    .build();
+  const swaggerEnabled =
+    configService.get<string>('SWAGGER_ENABLED') !== 'false';
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('PlzDrawing API')
+      .setDescription('PlzDrawing API 문서')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'JWT',
+          description: 'Enter JWT token',
+          in: 'header',
+        },
+        'access-token',
+      )
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-  SwaggerModule.setup('api-docs', app, document, {
-    useGlobalPrefix: false,
-    jsonDocumentUrl: 'api-docs-json',
-  });
+    SwaggerModule.setup('api-docs', app, document, {
+      useGlobalPrefix: false,
+      jsonDocumentUrl: 'api-docs-json',
+    });
+  }
 
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
