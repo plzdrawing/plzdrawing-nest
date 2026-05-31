@@ -257,9 +257,18 @@ export class WalletService {
       const order = await orderRepository.findOne({
         where: { id: orderId, memberId },
         relations: ['coinProduct'],
+        lock: { mode: 'pessimistic_write' },
       });
       if (!order) {
         throw new NotFoundException('Coin order not found');
+      }
+      if (
+        order.status === PaymentStatus.COMPLETED &&
+        order.paymentKey === dto.paymentKey &&
+        order.amount === dto.amount
+      ) {
+        await queryRunner.commitTransaction();
+        return this.mapCoinOrder(order, order.coinProduct);
       }
       if (order.status !== PaymentStatus.PENDING) {
         throw new BadRequestException('Coin order is not in pending status');
@@ -473,9 +482,14 @@ export class WalletService {
       const order = await orderRepository.findOne({
         where: { id: orderId, memberId },
         relations: ['coinProduct'],
+        lock: { mode: 'pessimistic_write' },
       });
       if (!order) {
         throw new NotFoundException('Coin order not found');
+      }
+      if (order.status === PaymentStatus.CANCELLED) {
+        await queryRunner.commitTransaction();
+        return this.mapCoinOrder(order, order.coinProduct);
       }
       if (order.status !== PaymentStatus.COMPLETED) {
         throw new BadRequestException(
