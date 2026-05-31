@@ -1,3 +1,5 @@
+import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AlarmController } from './alarm.controller';
 import { AlarmService } from './alarm.service';
@@ -9,9 +11,13 @@ describe('AlarmController', () => {
   const mockAlarmService = {
     sendMessageTo: jest.fn(),
   };
+  const mockConfigService = {
+    get: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockConfigService.get.mockReturnValue('development');
     consoleLogSpy = jest
       .spyOn(console, 'log')
       .mockImplementation(() => undefined);
@@ -22,6 +28,10 @@ describe('AlarmController', () => {
         {
           provide: AlarmService,
           useValue: mockAlarmService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -57,5 +67,12 @@ describe('AlarmController', () => {
       'FCM Test send failed (expected without valid token):',
       expect.any(Error),
     );
+  });
+
+  it('운영 환경에서는 FCM 테스트 엔드포인트를 숨겨야 한다', async () => {
+    mockConfigService.get.mockReturnValue('production');
+
+    await expect(controller.fcmTest()).rejects.toThrow(NotFoundException);
+    expect(mockAlarmService.sendMessageTo).not.toHaveBeenCalled();
   });
 });

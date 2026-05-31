@@ -1,18 +1,33 @@
-import { Controller, Post, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AlarmService } from './alarm.service';
 
 @ApiTags('Alarm')
 @Controller('fcm')
 export class AlarmController {
-  constructor(private readonly alarmService: AlarmService) {}
+  constructor(
+    private readonly alarmService: AlarmService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Post('v1/test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'FCM 알림 전송 테스트' })
   @ApiResponse({ status: 200, description: '알림 전송 성공', type: Boolean })
   @ApiResponse({ status: 400, description: '잘못된 요청' })
+  @ApiResponse({ status: 404, description: '운영 환경에서는 비활성화' })
   async fcmTest() {
+    if (this.configService.get<string>('NODE_ENV') === 'production') {
+      throw new NotFoundException();
+    }
+
     // 테스트용 토큰과 메시지 (실제 테스트 시에는 유효한 토큰 필요)
     const targetToken = 'target';
     const title = '알림 테스트';

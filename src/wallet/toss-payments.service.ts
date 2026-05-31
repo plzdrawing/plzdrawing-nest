@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-type TossConfirmResponse = {
+export type TossPaymentResponse = {
   paymentKey: string;
   orderId: string;
   totalAmount: number;
@@ -15,12 +15,8 @@ type TossConfirmResponse = {
   approvedAt?: string;
 };
 
-type TossCancelResponse = {
-  paymentKey: string;
-  orderId: string;
-  totalAmount: number;
-  status: string;
-};
+type TossConfirmResponse = TossPaymentResponse;
+type TossCancelResponse = TossPaymentResponse;
 
 @Injectable()
 export class TossPaymentsService {
@@ -128,5 +124,51 @@ export class TossPaymentsService {
     }
 
     return body as TossCancelResponse;
+  }
+
+  async getPayment(paymentKey: string): Promise<TossPaymentResponse> {
+    const secretKey = this.configService.get<string>(
+      'TOSS_PAYMENTS_SECRET_KEY',
+    );
+    if (!secretKey) {
+      throw new InternalServerErrorException(
+        'TOSS_PAYMENTS_SECRET_KEY is not configured',
+      );
+    }
+
+    const baseUrl =
+      this.configService.get<string>('TOSS_PAYMENTS_API_BASE_URL') ??
+      'https://api.tosspayments.com';
+
+    const authValue = Buffer.from(`${secretKey}:`).toString('base64');
+    const response = await fetch(
+      `${baseUrl}/v1/payments/${encodeURIComponent(paymentKey)}`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Basic ${authValue}`,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const body = (await response.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+
+    if (!response.ok) {
+      const message =
+        typeof body?.message === 'string'
+          ? body.message
+          : 'Failed to get Toss payment';
+
+      if (response.status >= 400 && response.status < 500) {
+        throw new BadRequestException(message);
+      }
+      throw new BadGatewayException(message);
+    }
+
+    return body as TossPaymentResponse;
   }
 }

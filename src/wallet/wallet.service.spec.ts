@@ -87,6 +87,7 @@ describe('WalletService', () => {
   const tossPaymentsService = {
     confirmPayment: jest.fn(),
     cancelPayment: jest.fn(),
+    getPayment: jest.fn(),
   };
 
   beforeEach(() => {
@@ -345,6 +346,9 @@ describe('WalletService', () => {
   it('ABORTED 웹훅이면 대기중 주문을 FAILED로 바꿔야 한다', async () => {
     const order = createPendingOrder();
 
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'ABORTED'),
+    );
     coinOrderRepository.findOne.mockResolvedValue(order);
     coinOrderRepository.save.mockImplementation(async (data) => data);
 
@@ -369,6 +373,9 @@ describe('WalletService', () => {
   it('DONE 웹훅이면 상태를 유지하고 paymentKey만 반영해야 한다', async () => {
     const order = createPendingOrder();
 
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'DONE'),
+    );
     coinOrderRepository.findOne.mockResolvedValue(order);
     coinOrderRepository.save.mockImplementation(async (data) => data);
 
@@ -391,7 +398,12 @@ describe('WalletService', () => {
   });
 
   it('완료된 주문에는 웹훅이 와도 상태를 바꾸지 않아야 한다', async () => {
-    coinOrderRepository.findOne.mockResolvedValue(createCompletedOrder());
+    const order = createCompletedOrder();
+
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'ABORTED'),
+    );
+    coinOrderRepository.findOne.mockResolvedValue(order);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
@@ -406,8 +418,14 @@ describe('WalletService', () => {
     expect(coinOrderRepository.save).not.toHaveBeenCalled();
   });
 
-  it('웹훅 금액이 주문 금액과 다르면 무시해야 한다', async () => {
-    coinOrderRepository.findOne.mockResolvedValue(createPendingOrder());
+  it('토스 조회 금액이 주문 금액과 다르면 무시해야 한다', async () => {
+    const order = createPendingOrder();
+
+    tossPaymentsService.getPayment.mockResolvedValue({
+      ...createTossPayment(order, 'CANCELED'),
+      totalAmount: 9999,
+    });
+    coinOrderRepository.findOne.mockResolvedValue(order);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
@@ -418,6 +436,50 @@ describe('WalletService', () => {
       },
     });
 
+    expect(coinOrderRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('웹훅 본문과 토스 조회 결과의 주문번호가 다르면 무시해야 한다', async () => {
+    const order = createPendingOrder();
+
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'CANCELED'),
+    );
+
+    await service.handleTossWebhook({
+      eventType: 'PAYMENT_STATUS_CHANGED',
+      data: {
+        orderId: 'forged-order',
+        paymentKey: 'payment-key',
+        status: 'CANCELED',
+        totalAmount: order.amount,
+      },
+    });
+
+    expect(coinOrderRepository.findOne).not.toHaveBeenCalled();
+    expect(coinOrderRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('토스 조회에서 4xx가 나면 웹훅 처리를 무시해야 한다', async () => {
+    const order = createPendingOrder();
+
+    tossPaymentsService.getPayment.mockRejectedValue(
+      new BadRequestException('Invalid paymentKey'),
+    );
+
+    await expect(
+      service.handleTossWebhook({
+        eventType: 'PAYMENT_STATUS_CHANGED',
+        data: {
+          orderId: order.orderCode,
+          paymentKey: 'invalid-payment-key',
+          status: 'CANCELED',
+          totalAmount: order.amount,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(coinOrderRepository.findOne).not.toHaveBeenCalled();
     expect(coinOrderRepository.save).not.toHaveBeenCalled();
   });
 });
@@ -453,6 +515,19 @@ function createCompletedOrder(): CoinOrder {
     status: PaymentStatus.COMPLETED,
     paymentKey: 'payment-key',
     approvedAt: new Date(),
+  };
+}
+
+function createTossPayment(
+  order: CoinOrder,
+  status: string,
+  paymentKey = 'payment-key',
+) {
+  return {
+    paymentKey,
+    orderId: order.orderCode,
+    totalAmount: order.amount,
+    status,
   };
 }
 

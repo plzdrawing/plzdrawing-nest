@@ -34,7 +34,10 @@ import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
-import { TossPaymentsService } from './toss-payments.service';
+import {
+  TossPaymentsService,
+  type TossPaymentResponse,
+} from './toss-payments.service';
 
 @Injectable()
 export class WalletService {
@@ -546,20 +549,47 @@ export class WalletService {
       return;
     }
 
-    const orderId =
+    const webhookOrderId =
       typeof payload.data?.orderId === 'string' ? payload.data.orderId : null;
-    const status =
-      typeof payload.data?.status === 'string' ? payload.data.status : null;
-    const paymentKey =
+    const webhookPaymentKey =
       typeof payload.data?.paymentKey === 'string'
         ? payload.data.paymentKey
         : null;
+
+    if (!webhookOrderId || !webhookPaymentKey) {
+      return;
+    }
+
+    let tossPayment: TossPaymentResponse;
+    try {
+      tossPayment =
+        await this.tossPaymentsService.getPayment(webhookPaymentKey);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return;
+      }
+      throw error;
+    }
+    const orderId =
+      typeof tossPayment.orderId === 'string' ? tossPayment.orderId : null;
+    const status =
+      typeof tossPayment.status === 'string' ? tossPayment.status : null;
+    const paymentKey =
+      typeof tossPayment.paymentKey === 'string'
+        ? tossPayment.paymentKey
+        : null;
     const totalAmount =
-      typeof payload.data?.totalAmount === 'number'
-        ? payload.data.totalAmount
+      typeof tossPayment.totalAmount === 'number'
+        ? tossPayment.totalAmount
         : null;
 
-    if (!orderId || !status) {
+    if (
+      !orderId ||
+      !status ||
+      !paymentKey ||
+      orderId !== webhookOrderId ||
+      paymentKey !== webhookPaymentKey
+    ) {
       return;
     }
 
@@ -570,7 +600,7 @@ export class WalletService {
       return;
     }
 
-    if (totalAmount !== null && totalAmount !== order.amount) {
+    if (totalAmount !== order.amount) {
       return;
     }
 
