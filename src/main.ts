@@ -34,9 +34,8 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
 
-  const isProduction = configService.get<string>('NODE_ENV') === 'production';
   const swaggerEnabled =
-    !isProduction || configService.get<string>('SWAGGER_ENABLED') === 'true';
+    configService.get<string>('SWAGGER_ENABLED') !== 'false';
   if (swaggerEnabled) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('PlzDrawing API')
