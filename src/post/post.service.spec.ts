@@ -186,37 +186,6 @@ describe('PostService', () => {
     });
   });
 
-  it('findAll은 페이지네이션으로 조회한다', async () => {
-    postRepository.findAndCount.mockResolvedValue([[{ id: 1 }], 1]);
-
-    await expect(
-      service.findAll({ page: 2, limit: 5 } as any),
-    ).resolves.toEqual({
-      data: [{ id: 1 }],
-      total: 1,
-      page: 2,
-      limit: 5,
-    });
-    expect(postRepository.findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skip: 5,
-        take: 5,
-      }),
-    );
-  });
-
-  it('findByMember는 memberId 조건으로 조회한다', async () => {
-    postRepository.findAndCount.mockResolvedValue([[], 0]);
-
-    await service.findByMember(9, { page: 1, limit: 10 } as any);
-
-    expect(postRepository.findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { memberId: 9 },
-      }),
-    );
-  });
-
   describe('getLatestContents', () => {
     it('게시글이 없으면 빈 결과를 반환한다', async () => {
       postFeedQueryRepository.findLatestPosts.mockResolvedValue({

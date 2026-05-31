@@ -106,46 +106,6 @@ export class PostService {
     }
   }
 
-  async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<{ data: Post[]; total: number; page: number; limit: number }> {
-    const { page = 1, limit = 10 } = paginationDto;
-    const [data, total] = await this.postRepository.findAndCount({
-      relations: ['member', 'images', 'postTags', 'postTags.tag'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-    };
-  }
-
-  async findByMember(
-    memberId: number,
-    paginationDto: PaginationDto,
-  ): Promise<{ data: Post[]; total: number; page: number; limit: number }> {
-    const { page = 1, limit = 10 } = paginationDto;
-    const [data, total] = await this.postRepository.findAndCount({
-      where: { memberId },
-      relations: ['member', 'images', 'postTags', 'postTags.tag'],
-      order: { createdAt: 'DESC' },
-      skip: (page - 1) * limit,
-      take: limit,
-    });
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-    };
-  }
-
   async getLatestContents(
     queryDto: LatestContentsQueryDto,
     memberId?: number,
