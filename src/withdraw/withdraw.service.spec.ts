@@ -278,6 +278,13 @@ describe('WithdrawService', () => {
       );
 
       expect(
+        queryRunner.manager.getRepository(WithdrawRequest).findOne,
+      ).toHaveBeenCalledWith({
+        where: { id: 1 },
+        relations: ['withdrawAccount'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      expect(
         queryRunner.manager.getRepository(Wallet).findOne,
       ).toHaveBeenCalledWith({
         where: { memberId: 1 },
@@ -303,6 +310,41 @@ describe('WithdrawService', () => {
           { status: WithdrawRequestStatus.REJECTED },
         ),
       ).rejects.toThrow(BadRequestException);
+
+      expect(
+        queryRunner.manager.getRepository(WithdrawRequest).findOne,
+      ).toHaveBeenCalledWith({
+        where: { id: 1 },
+        relations: ['withdrawAccount'],
+        lock: { mode: 'pessimistic_write' },
+      });
+    });
+
+    it('이미 반려된 요청은 다시 복구 거래를 만들 수 없다', async () => {
+      queryRunner.manager
+        .getRepository(WithdrawRequest)
+        .findOne.mockResolvedValue({
+          id: 1,
+          memberId: 1,
+          coinAmount: 10,
+          cashAmount: 500,
+          status: WithdrawRequestStatus.REJECTED,
+        });
+
+      await expect(
+        service.updateByAdmin(
+          { id: 99, role: MemberRole.ROLE_ADMIN } as Member,
+          1,
+          { status: WithdrawRequestStatus.REJECTED },
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(
+        queryRunner.manager.getRepository(Wallet).findOne,
+      ).not.toHaveBeenCalled();
+      expect(
+        queryRunner.manager.getRepository(WalletTransaction).save,
+      ).not.toHaveBeenCalled();
     });
   });
 

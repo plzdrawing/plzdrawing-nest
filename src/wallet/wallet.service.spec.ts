@@ -258,6 +258,28 @@ describe('WalletService', () => {
     expect(tossPaymentsService.confirmPayment).not.toHaveBeenCalled();
   });
 
+  it('이미 완료된 동일 주문 승인 재시도는 잔액과 거래내역을 다시 반영하지 않아야 한다', async () => {
+    const order = createCompletedOrder();
+
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+
+    const result = await service.confirmCoinOrder(1, 1, {
+      paymentKey: 'payment-key',
+      amount: 1200,
+    });
+
+    expect(txCoinOrderRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 1, memberId: 1 },
+      relations: ['coinProduct'],
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(result.status).toBe(PaymentStatus.COMPLETED);
+    expect(tossPaymentsService.confirmPayment).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+  });
+
   it('토스 승인 응답이 DONE이 아니면 결제 완료 처리하지 않아야 한다', async () => {
     const order = createPendingOrder();
 
@@ -307,6 +329,11 @@ describe('WalletService', () => {
       amount: 1200,
     });
 
+    expect(txCoinOrderRepository.findOne).toHaveBeenNthCalledWith(1, {
+      where: { id: 1, memberId: 1 },
+      relations: ['coinProduct'],
+      lock: { mode: 'pessimistic_write' },
+    });
     expect(txWalletRepository.findOne).toHaveBeenCalledWith({
       where: { memberId: 1 },
       lock: { mode: 'pessimistic_write' },
@@ -335,12 +362,38 @@ describe('WalletService', () => {
       }),
     ).rejects.toThrow(BadRequestException);
 
+    expect(txCoinOrderRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 1, memberId: 1 },
+      relations: ['coinProduct'],
+      lock: { mode: 'pessimistic_write' },
+    });
     expect(txWalletRepository.findOne).toHaveBeenCalledWith({
       where: { memberId: 1 },
       lock: { mode: 'pessimistic_write' },
     });
     expect(txWalletRepository.save).not.toHaveBeenCalled();
     expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('이미 취소된 동일 주문 취소 재시도는 잔액과 거래내역을 다시 반영하지 않아야 한다', async () => {
+    const order = createCancelledOrder();
+
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+
+    const result = await service.cancelCoinOrder(1, 1, {
+      cancelReason: '사용자 요청',
+    });
+
+    expect(txCoinOrderRepository.findOne).toHaveBeenCalledWith({
+      where: { id: 1, memberId: 1 },
+      relations: ['coinProduct'],
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(result.status).toBe(PaymentStatus.CANCELLED);
+    expect(tossPaymentsService.cancelPayment).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
   });
 
   it('ABORTED 웹훅이면 대기중 주문을 FAILED로 바꿔야 한다', async () => {
@@ -515,6 +568,15 @@ function createCompletedOrder(): CoinOrder {
     status: PaymentStatus.COMPLETED,
     paymentKey: 'payment-key',
     approvedAt: new Date(),
+  };
+}
+
+function createCancelledOrder(): CoinOrder {
+  return {
+    ...createCompletedOrder(),
+    status: PaymentStatus.CANCELLED,
+    cancelReason: '사용자 요청',
+    cancelledAt: new Date(),
   };
 }
 

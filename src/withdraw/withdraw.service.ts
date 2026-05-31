@@ -278,6 +278,7 @@ export class WithdrawService {
       const request = await requestRepository.findOne({
         where: { id: requestId },
         relations: ['withdrawAccount'],
+        lock: { mode: 'pessimistic_write' },
       });
       if (!request) {
         throw new NotFoundException('Withdraw request not found');
