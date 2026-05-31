@@ -54,6 +54,7 @@ pnpm test
 
 - `PORT`
 - `NODE_ENV`
+- `SWAGGER_ENABLED`
 
 ### DB
 
