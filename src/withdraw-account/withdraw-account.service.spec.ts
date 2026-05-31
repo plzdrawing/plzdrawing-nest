@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -113,13 +114,18 @@ describe('WithdrawAccountService', () => {
       );
       expect(result.isPrimary).toBe(true);
       expect(result.accountNumberMasked).toContain('******');
+      const savedPayload = withdrawAccountRepository.create.mock.calls[0][0];
+      expect(savedPayload.accountNumberEncrypted).toMatch(/^v2:/);
+      expect(savedPayload.accountNumberEncrypted).not.toContain(
+        '12345678901234',
+      );
     });
 
-    it('중복 계좌면 BadRequestException을 던진다', async () => {
+    it('기존 AES-CBC 암호문과 중복 계좌면 BadRequestException을 던진다', async () => {
       memberRepository.findOne.mockResolvedValue({ id: 1 });
       withdrawAccountRepository.find.mockResolvedValue([
         {
-          accountNumberEncrypted: encryptAccountNumber(
+          accountNumberEncrypted: encryptLegacyAccountNumber(
             'test-withdraw-secret',
             '12345678901234',
           ),
@@ -135,6 +141,100 @@ describe('WithdrawAccountService', () => {
           accountNumber: '12345678901234',
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('기존 AES-GCM 암호문과 중복 계좌면 BadRequestException을 던진다', async () => {
+      memberRepository.findOne.mockResolvedValue({ id: 1 });
+      withdrawAccountRepository.find.mockResolvedValue([
+        {
+          accountNumberEncrypted: encryptGcmAccountNumber(
+            'test-withdraw-secret',
+            '12345678901234',
+          ),
+          status: WithdrawAccountStatus.ACTIVE,
+        },
+      ]);
+
+      await expect(
+        service.create(1, {
+          bankCode: '004',
+          bankName: '국민은행',
+          accountHolder: '홍길동',
+          accountNumber: '12345678901234',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('암호화 키가 없으면 계좌번호를 저장하지 않아야 한다', async () => {
+      configService.get.mockReturnValue(undefined);
+      memberRepository.findOne.mockResolvedValue({ id: 1 });
+      withdrawAccountRepository.find.mockResolvedValue([]);
+
+      await expect(
+        service.create(1, {
+          bankCode: '004',
+          bankName: '국민은행',
+          accountHolder: '홍길동',
+          accountNumber: '12345678901234',
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(withdrawAccountRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('운영 환경에서도 암호화 키 누락은 계좌 저장 시점에만 실패한다', async () => {
+      configService.get.mockImplementation((key: string) => {
+        if (key === 'NODE_ENV') {
+          return 'production';
+        }
+        return undefined;
+      });
+      memberRepository.findOne.mockResolvedValue({ id: 1 });
+      withdrawAccountRepository.find.mockResolvedValue([]);
+
+      expect((service as any).onModuleInit).toBeUndefined();
+      await expect(
+        service.create(1, {
+          bankCode: '004',
+          bankName: '국민은행',
+          accountHolder: '홍길동',
+          accountNumber: '12345678901234',
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
+
+    it('변조된 AES-GCM 암호문은 복호화하지 않아야 한다', async () => {
+      const tamperedEncryptedAccountNumber = encryptGcmAccountNumber(
+        'test-withdraw-secret',
+        '12345678901234',
+      );
+      const tamperedCipherText = `${tamperedEncryptedAccountNumber.slice(
+        0,
+        -1,
+      )}${
+        tamperedEncryptedAccountNumber.charAt(
+          tamperedEncryptedAccountNumber.length - 1,
+        ) === '0'
+          ? '1'
+          : '0'
+      }`;
+
+      memberRepository.findOne.mockResolvedValue({ id: 1 });
+      withdrawAccountRepository.find.mockResolvedValue([
+        {
+          accountNumberEncrypted: tamperedCipherText,
+          status: WithdrawAccountStatus.ACTIVE,
+        },
+      ]);
+
+      await expect(
+        service.create(1, {
+          bankCode: '004',
+          bankName: '국민은행',
+          accountHolder: '홍길동',
+          accountNumber: '99999999999999',
+        }),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 
@@ -283,7 +383,10 @@ describe('WithdrawAccountService', () => {
   });
 });
 
-function encryptAccountNumber(secret: string, accountNumber: string): string {
+function encryptLegacyAccountNumber(
+  secret: string,
+  accountNumber: string,
+): string {
   const key = crypto.createHash('sha256').update(secret).digest();
   const iv = Buffer.alloc(16, 1);
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
@@ -293,6 +396,22 @@ function encryptAccountNumber(secret: string, accountNumber: string): string {
   ]);
 
   return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
+}
+
+function encryptGcmAccountNumber(
+  secret: string,
+  accountNumber: string,
+): string {
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const iv = Buffer.alloc(12, 1);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(accountNumber, 'utf8'),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+
+  return `v2:${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
 function createQueryBuilderMock(result: any[]) {

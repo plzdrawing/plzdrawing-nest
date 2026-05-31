@@ -135,7 +135,8 @@ pnpm test
 - `WITHDRAW_COIN_UNIT=10`
 - `WITHDRAW_CASH_PER_COIN=100`
 - `WITHDRAW_FLAT_FEE_AMOUNT=0`
-- `WITHDRAW_ACCOUNT_SECRET=plzdrawing-withdraw-account-secret`
+
+`WITHDRAW_ACCOUNT_SECRET`은 환전계좌 암호화에 사용되며 운영 환경에서는 필수입니다.
 
 ### 앱 정보
 
