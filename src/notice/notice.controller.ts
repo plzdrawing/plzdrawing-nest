@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -107,6 +109,7 @@ export class NoticeController {
   @Delete('v1/:id')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '공지사항 삭제 (관리자)' })
   @ApiResponse({ status: 204, description: '공지사항 삭제 성공' })
   @ApiResponse({ status: 403, description: '관리자 권한 필요' })

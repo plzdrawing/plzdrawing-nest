@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   ParseIntPipe,
@@ -220,6 +222,7 @@ export class MemberController {
   @Delete('v1/withdraw')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth('access-token')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '회원 탈퇴' })
   @ApiResponse({ status: 204, description: '회원 탈퇴 성공' })
   async withdraw(@GetUser() member: Member): Promise<void> {
