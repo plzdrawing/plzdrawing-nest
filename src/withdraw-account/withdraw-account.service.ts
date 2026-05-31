@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -19,6 +20,9 @@ import { WithdrawAccountResponseDto } from './dto/withdraw-account-response.dto'
 
 @Injectable()
 export class WithdrawAccountService {
+  private static readonly ENCRYPTION_VERSION = 'v2';
+  private static readonly GCM_IV_LENGTH = 12;
+
   private static readonly BANKS = [
     new BankResponseDto('004', '국민은행'),
     new BankResponseDto('088', '신한은행'),
@@ -316,32 +320,77 @@ export class WithdrawAccountService {
   }
 
   private encryptAccountNumber(accountNumber: string): string {
-    const key = crypto
-      .createHash('sha256')
-      .update(
-        this.configService.get<string>('WITHDRAW_ACCOUNT_SECRET') ??
-          'plzdrawing-withdraw-account-secret',
-      )
-      .digest();
-    const iv = crypto.randomBytes(16);
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const key = this.getEncryptionKey();
+    const iv = crypto.randomBytes(WithdrawAccountService.GCM_IV_LENGTH);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
     const encrypted = Buffer.concat([
       cipher.update(accountNumber, 'utf8'),
       cipher.final(),
     ]);
+    const authTag = cipher.getAuthTag();
 
-    return `${iv.toString('hex')}:${encrypted.toString('hex')}`;
+    return [
+      WithdrawAccountService.ENCRYPTION_VERSION,
+      iv.toString('hex'),
+      authTag.toString('hex'),
+      encrypted.toString('hex'),
+    ].join(':');
   }
 
   private decryptAccountNumber(encryptedValue: string): string {
-    const key = crypto
-      .createHash('sha256')
-      .update(
-        this.configService.get<string>('WITHDRAW_ACCOUNT_SECRET') ??
-          'plzdrawing-withdraw-account-secret',
-      )
-      .digest();
+    const key = this.getEncryptionKey();
+
+    try {
+      if (
+        encryptedValue.startsWith(
+          `${WithdrawAccountService.ENCRYPTION_VERSION}:`,
+        )
+      ) {
+        return this.decryptGcmAccountNumber(encryptedValue, key);
+      }
+
+      return this.decryptLegacyCbcAccountNumber(encryptedValue, key);
+    } catch {
+      throw new InternalServerErrorException(
+        'Withdraw account encryption data is invalid',
+      );
+    }
+  }
+
+  private decryptGcmAccountNumber(encryptedValue: string, key: Buffer): string {
+    const [version, ivHex, authTagHex, cipherHex] = encryptedValue.split(':');
+    if (
+      version !== WithdrawAccountService.ENCRYPTION_VERSION ||
+      !ivHex ||
+      !authTagHex ||
+      !cipherHex
+    ) {
+      throw new Error('Invalid encrypted account number format');
+    }
+
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      key,
+      Buffer.from(ivHex, 'hex'),
+    );
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(cipherHex, 'hex')),
+      decipher.final(),
+    ]);
+
+    return decrypted.toString('utf8');
+  }
+
+  private decryptLegacyCbcAccountNumber(
+    encryptedValue: string,
+    key: Buffer,
+  ): string {
     const [ivHex, cipherHex] = encryptedValue.split(':');
+    if (!ivHex || !cipherHex) {
+      throw new Error('Invalid legacy encrypted account number format');
+    }
+
     const decipher = crypto.createDecipheriv(
       'aes-256-cbc',
       key,
@@ -353,5 +402,22 @@ export class WithdrawAccountService {
     ]);
 
     return decrypted.toString('utf8');
+  }
+
+  private getEncryptionKey(): Buffer {
+    const secret = this.getEncryptionSecret();
+    if (!secret) {
+      throw new InternalServerErrorException(
+        'WITHDRAW_ACCOUNT_SECRET is not configured',
+      );
+    }
+
+    return crypto.createHash('sha256').update(secret).digest();
+  }
+
+  private getEncryptionSecret(): string | null {
+    const secret = this.configService.get<string>('WITHDRAW_ACCOUNT_SECRET');
+    const trimmedSecret = secret?.trim();
+    return trimmedSecret && trimmedSecret.length > 0 ? trimmedSecret : null;
   }
 }
