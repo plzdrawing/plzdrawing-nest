@@ -38,6 +38,7 @@ import { Member } from '../entities/member.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostDetailResponseDto } from './dto/post-detail-response.dto';
+import { PostCategory } from '../common/enums';
 
 type AuthRequest = ExpressRequest & { user: Member };
 
@@ -109,8 +110,11 @@ export class PostController {
         },
         title: { type: 'string' },
         content: { type: 'string' },
-        timeTaken: { type: 'string', example: '10분' },
-        price: { type: 'number', example: 12000 },
+        category: {
+          type: 'string',
+          enum: Object.values(PostCategory),
+          example: PostCategory.REQUEST,
+        },
         hashTag: {
           type: 'array',
           items: { type: 'string' },
@@ -128,8 +132,12 @@ export class PostController {
 
   @Get()
   @UseGuards(JwtOptionalAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: '최신 게시글 조회' })
+  @ApiOperation({
+    summary: '최신 게시글 조회',
+    description:
+      'Bearer 토큰은 선택입니다. scrappedOnly=true 필터는 인증된 요청에서만 사용할 수 있습니다.',
+    security: [{ 'access-token': [] }, {}],
+  })
   @ApiResponse({
     status: 200,
     description: '최신 게시글 조회 성공',
@@ -201,6 +209,11 @@ export class PostController {
         },
         title: { type: 'string' },
         content: { type: 'string' },
+        category: {
+          type: 'string',
+          enum: Object.values(PostCategory),
+          example: PostCategory.REQUEST,
+        },
         hashTag: {
           type: 'array',
           items: { type: 'string' },
