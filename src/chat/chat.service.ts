@@ -604,6 +604,7 @@ export class ChatService {
         throw new BadRequestException('Price is not set');
       }
 
+      const previousStatus = chatRoom.status;
       const requesterWallet = await walletRepository.findOne({
         where: { memberId: chatRoom.requesterId },
         lock: { mode: 'pessimistic_write' },
@@ -670,7 +671,7 @@ export class ChatService {
       const estimatedAtStr = chatRoom.estimatedAt
         ? new Date(chatRoom.estimatedAt).toISOString().slice(0, 10)
         : '';
-      await messageRepository.save(
+      const paymentMessage = await messageRepository.save(
         messageRepository.create({
           chatRoomId,
           senderId: member.id,
@@ -683,9 +684,16 @@ export class ChatService {
           }),
         }),
       );
+      const paymentMessageResponse = await this.mapMessage(paymentMessage);
       await chatRoomRepository.update(chatRoomId, { updatedAt: new Date() });
 
       await queryRunner.commitTransaction();
+      this.emitMessageCreated(chatRoom, paymentMessageResponse);
+      this.emitChatStatusChanged(chatRoom, previousStatus, null, {
+        paidAmount: chatRoom.paidAmount,
+        feedbackCount: chatRoom.feedbackCount,
+      });
+
       return { feedbackCount: chatRoom.feedbackCount };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -708,6 +716,7 @@ export class ChatService {
       throw new BadRequestException('Chat room is not in PAID status');
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.IN_PROGRESS;
     await this.chatRoomRepository.save(chatRoom);
 
@@ -715,7 +724,10 @@ export class ChatService {
       kind: 'WORK_STARTED',
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response);
+    return response;
   }
 
   // ── 그림 전송 (IN_PROGRESS → DRAFT_SENT) ─────────────────────────────────
@@ -736,6 +748,7 @@ export class ChatService {
       this.assertImageObjectKey(key, chatRoomId);
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.DRAFT_SENT;
     await this.chatRoomRepository.save(chatRoom);
 
@@ -746,6 +759,13 @@ export class ChatService {
       remainingRevisions,
     });
     await this.touchChatRoom(chatRoomId);
+
+    this.emitChatStatusChanged(
+      chatRoom,
+      previousStatus,
+      this.mapChatRoomDetail(chatRoom),
+      { remainingRevisions },
+    );
 
     return { remainingRevisions };
   }
@@ -767,6 +787,7 @@ export class ChatService {
       throw new BadRequestException('No remaining revisions');
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.feedbackUsed += 1;
     chatRoom.status = ChatRoomStatus.IN_PROGRESS;
     await this.chatRoomRepository.save(chatRoom);
@@ -778,7 +799,12 @@ export class ChatService {
       remainingRevisions,
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response, {
+      remainingRevisions,
+    });
+    return response;
   }
 
   // ── 최종 확인 / 저장하기 (DRAFT_SENT → COMPLETED) ───────────────────────
@@ -794,6 +820,7 @@ export class ChatService {
       throw new BadRequestException('Chat room is not in DRAFT_SENT status');
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.COMPLETED;
     await this.chatRoomRepository.save(chatRoom);
 
@@ -805,7 +832,10 @@ export class ChatService {
       requesterNickname: member.nickname,
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response);
+    return response;
   }
 
   private async createRequestCardMessage(
@@ -1105,13 +1135,15 @@ export class ChatService {
   private emitChatStatusChanged(
     chatRoom: ChatRoom,
     previousStatus: ChatRoomStatus,
-    chatRoomDetail: ChatRoomDetailResponseDto,
+    chatRoomDetail: ChatRoomDetailResponseDto | null,
+    extraPayload: Record<string, unknown> = {},
   ): void {
     const payload = {
       chatRoomId: chatRoom.id,
       previousStatus,
-      status: chatRoomDetail.status,
-      chatRoom: chatRoomDetail,
+      status: chatRoomDetail?.status ?? chatRoom.status,
+      ...extraPayload,
+      ...(chatRoomDetail ? { chatRoom: chatRoomDetail } : {}),
     };
 
     this.chatRealtimeService.emitToChatRoom(
