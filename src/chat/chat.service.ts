@@ -417,7 +417,7 @@ export class ChatService {
     chatRoom.description = dto.description;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'REQUEST_CARD',
       postId: chatRoom.post.id,
       title: chatRoom.post.title,
@@ -426,7 +426,9 @@ export class ChatService {
     });
     await this.touchChatRoom(chatRoomId);
 
-    return this.mapChatRoomDetail(chatRoom);
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatDetailUpdated(chatRoom, response);
+    return response;
   }
 
   // ── 수락 (REQUESTED → ACCEPTED) ──────────────────────────────────────────
@@ -443,24 +445,28 @@ export class ChatService {
       throw new BadRequestException('Chat room is not in REQUESTED status');
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.ACCEPTED;
     chatRoom.price = dto.price;
     chatRoom.estimatedAt = new Date(dto.estimatedAt);
     chatRoom.feedbackCount = dto.feedbackCount;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'ACCEPTED',
       artistNickname: member.nickname,
     });
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'PAYMENT_REQUEST',
       price: dto.price,
       estimatedAt: dto.estimatedAt,
       feedbackCount: dto.feedbackCount,
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response);
+    return response;
   }
 
   // ── 거절 (REQUESTED → CANCELLED) ─────────────────────────────────────────
@@ -477,16 +483,20 @@ export class ChatService {
       throw new BadRequestException('Chat room is not in REQUESTED status');
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.CANCELLED;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'REJECTED',
       reasons: dto.reasons ?? [],
       reasonText: dto.reasonText ?? '',
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response);
+    return response;
   }
 
   // ── 요청자 취소 (REQUESTED / ACCEPTED → CANCELLED) ───────────────────────
@@ -507,14 +517,18 @@ export class ChatService {
       );
     }
 
+    const previousStatus = chatRoom.status;
     chatRoom.status = ChatRoomStatus.CANCELLED;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'CANCELLED_BY_REQUESTER',
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatStatusChanged(chatRoom, previousStatus, response);
+    return response;
   }
 
   // ── 견적/금액 수정 요청 (REQUESTED / ACCEPTED 상태 유지) ─────────────────
@@ -541,7 +555,7 @@ export class ChatService {
     chatRoom.feedbackCount = dto.feedbackCount;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'PRICE_CHANGE_REQUEST',
       price: dto.price,
       estimatedAt: dto.estimatedAt,
@@ -549,7 +563,10 @@ export class ChatService {
       reason: dto.reason ?? '',
     });
     await this.touchChatRoom(chatRoomId);
-    return this.mapChatRoomDetail(chatRoom);
+
+    const response = this.mapChatRoomDetail(chatRoom);
+    this.emitChatDetailUpdated(chatRoom, response);
+    return response;
   }
 
   // ── 결제 (ACCEPTED → PAID) ────────────────────────────────────────────────
@@ -694,7 +711,7 @@ export class ChatService {
     chatRoom.status = ChatRoomStatus.IN_PROGRESS;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'WORK_STARTED',
     });
     await this.touchChatRoom(chatRoomId);
@@ -723,7 +740,7 @@ export class ChatService {
     await this.chatRoomRepository.save(chatRoom);
 
     const remainingRevisions = chatRoom.feedbackCount - chatRoom.feedbackUsed;
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'DRAWING_SENT',
       imageObjectKeys: dto.imageObjectKeys,
       remainingRevisions,
@@ -755,7 +772,7 @@ export class ChatService {
     await this.chatRoomRepository.save(chatRoom);
 
     const remainingRevisions = chatRoom.feedbackCount - chatRoom.feedbackUsed;
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'REVISION_REQUESTED',
       content: dto.content,
       remainingRevisions,
@@ -780,10 +797,10 @@ export class ChatService {
     chatRoom.status = ChatRoomStatus.COMPLETED;
     await this.chatRoomRepository.save(chatRoom);
 
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'WORK_COMPLETED',
     });
-    await this.createSystemMessage(chatRoomId, member.id, {
+    await this.createSystemMessage(chatRoom, member.id, {
       kind: 'REVIEW_PROMPT',
       requesterNickname: member.nickname,
     });
@@ -839,17 +856,20 @@ export class ChatService {
   }
 
   private async createSystemMessage(
-    chatRoomId: number,
+    chatRoom: ChatRoom,
     senderId: number,
     content: object,
-  ): Promise<void> {
+  ): Promise<MessageResponseDto> {
     const message = this.messageRepository.create({
-      chatRoomId,
+      chatRoomId: chatRoom.id,
       senderId,
       type: MessageType.SYSTEM,
       content: JSON.stringify(content),
     });
-    await this.messageRepository.save(message);
+    const saved = await this.messageRepository.save(message);
+    const response = await this.mapMessage(saved);
+    this.emitMessageCreated(chatRoom, response);
+    return response;
   }
 
   private assertMember(chatRoom: ChatRoom, memberId: number): void {
@@ -1079,6 +1099,36 @@ export class ChatService {
     );
     this.emitChatUpdated(chatRoom, {
       read: payload,
+    });
+  }
+
+  private emitChatStatusChanged(
+    chatRoom: ChatRoom,
+    previousStatus: ChatRoomStatus,
+    chatRoomDetail: ChatRoomDetailResponseDto,
+  ): void {
+    const payload = {
+      chatRoomId: chatRoom.id,
+      previousStatus,
+      status: chatRoomDetail.status,
+      chatRoom: chatRoomDetail,
+    };
+
+    this.chatRealtimeService.emitToChatRoom(
+      chatRoom.id,
+      'chat:statusChanged',
+      payload,
+    );
+    this.emitChatUpdated(chatRoom, payload);
+  }
+
+  private emitChatDetailUpdated(
+    chatRoom: ChatRoom,
+    chatRoomDetail: ChatRoomDetailResponseDto,
+  ): void {
+    this.emitChatUpdated(chatRoom, {
+      status: chatRoomDetail.status,
+      chatRoom: chatRoomDetail,
     });
   }
 

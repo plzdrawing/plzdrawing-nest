@@ -421,6 +421,142 @@ describe('ChatService', () => {
   });
 
   describe('workflow state transitions', () => {
+    const buildRequestedRoom = (): ChatRoom =>
+      ({
+        id: 1,
+        requesterId: requester.id,
+        artistId: artist.id,
+        postId: post.id,
+        status: ChatRoomStatus.REQUESTED,
+        description: 'request',
+        referenceImageObjectKeys: [],
+        price: 3000,
+        createdAt: new Date('2026-02-14T00:00:00.000Z'),
+        updatedAt: new Date('2026-02-14T00:00:00.000Z'),
+        post,
+        requester,
+        artist,
+      }) as ChatRoom;
+
+    beforeEach(() => {
+      messageRepository.create.mockImplementation((payload: any) => payload);
+      messageRepository.save.mockImplementation((payload: any) => ({
+        id: 900,
+        imageUrl: null,
+        isRead: false,
+        sentAt: new Date('2026-02-14T00:00:00.000Z'),
+        ...payload,
+      }));
+      chatRoomRepository.save.mockImplementation((payload: any) =>
+        Promise.resolve(payload),
+      );
+      chatRoomRepository.update.mockResolvedValue(undefined);
+    });
+
+    it('요청 수락 시 상태 변경과 시스템 메시지를 실시간 발행해야 한다', async () => {
+      const room = buildRequestedRoom();
+      chatRoomRepository.findOne.mockResolvedValue(room);
+
+      const result = await service.acceptChatRoom(artist, room.id, {
+        price: 5000,
+        estimatedAt: '2026-03-01',
+        feedbackCount: 2,
+      });
+
+      expect(result.status).toBe(ChatRoomStatus.ACCEPTED);
+      expect(messageRepository.save).toHaveBeenCalledTimes(2);
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        room.id,
+        'message:created',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          senderId: artist.id,
+          type: MessageType.SYSTEM,
+        }),
+      );
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        room.id,
+        'chat:statusChanged',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          previousStatus: ChatRoomStatus.REQUESTED,
+          status: ChatRoomStatus.ACCEPTED,
+        }),
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          status: ChatRoomStatus.ACCEPTED,
+        }),
+      );
+    });
+
+    it('견적 수정 요청 시 채팅 상세 갱신과 시스템 메시지를 실시간 발행해야 한다', async () => {
+      const room = buildRequestedRoom();
+      chatRoomRepository.findOne.mockResolvedValue(room);
+
+      const result = await service.requestPriceChange(artist, room.id, {
+        price: 8000,
+        estimatedAt: '2026-03-05',
+        feedbackCount: 3,
+        reason: '작업 범위 추가',
+      });
+
+      expect(result.price).toBe(8000);
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        room.id,
+        'message:created',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          senderId: artist.id,
+          type: MessageType.SYSTEM,
+        }),
+      );
+      expect(chatRealtimeService.emitToChatRoom).not.toHaveBeenCalledWith(
+        room.id,
+        'chat:statusChanged',
+        expect.anything(),
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          chatRoom: expect.objectContaining({
+            price: 8000,
+          }),
+        }),
+      );
+    });
+
+    it('요청 취소 시 취소 상태 변경을 실시간 발행해야 한다', async () => {
+      const room = buildRequestedRoom();
+      chatRoomRepository.findOne.mockResolvedValue(room);
+
+      const result = await service.cancelChatRoom(requester, room.id);
+
+      expect(result.status).toBe(ChatRoomStatus.CANCELLED);
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        room.id,
+        'chat:statusChanged',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          previousStatus: ChatRoomStatus.REQUESTED,
+          status: ChatRoomStatus.CANCELLED,
+        }),
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        artist.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: room.id,
+          status: ChatRoomStatus.CANCELLED,
+        }),
+      );
+    });
+
     it('요청자는 수락 이전에 결제 상태로 건너뛸 수 없다', async () => {
       txChatRoomRepository.findOne.mockResolvedValue({
         id: 1,
