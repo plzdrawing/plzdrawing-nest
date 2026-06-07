@@ -56,6 +56,8 @@ pnpm test
 - `PORT`
 - `NODE_ENV`
 - `SWAGGER_ENABLED`
+- `CORS_ORIGINS`: HTTP CORS 허용 origin 목록, 쉼표로 구분
+- `CHAT_WS_CORS_ORIGINS`: WebSocket CORS 허용 origin 목록, 비어 있으면 `CORS_ORIGINS` 사용
 
 ### DB
 
@@ -262,6 +264,7 @@ pnpm test
 
 - namespace: `/chats`
 - 예시 URL: `http://localhost:3000/chats`
+- CORS 허용 origin: `CHAT_WS_CORS_ORIGINS`를 사용하며, 값이 없으면 `CORS_ORIGINS`를 사용합니다.
 - 인증: JWT access token 필요
 - 토큰 전달 방법:
   - Socket.IO auth: `{ token: '<access-token>' }`

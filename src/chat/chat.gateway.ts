@@ -46,17 +46,8 @@ interface ReadChatSocketPayload extends ReadChatDto {
   chatRoomId?: number | string;
 }
 
-const CHAT_WS_CORS_ORIGINS = [
-  'http://localhost:3000',
-  'https://plzdrawing.o-r.kr',
-];
-
 @WebSocketGateway({
   namespace: CHAT_WS_NAMESPACE,
-  cors: {
-    origin: CHAT_WS_CORS_ORIGINS,
-    credentials: true,
-  },
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
