@@ -1,5 +1,5 @@
+import { ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { WsException } from '@nestjs/websockets';
 import { AuthTokenBlacklistService } from '../auth/auth-token-blacklist.service';
 import {
   ChatRoomStatus,
@@ -12,6 +12,7 @@ import { MemberService } from '../member/member.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatRealtimeService } from './chat-realtime.service';
 import { ChatService } from './chat.service';
+import { CHAT_WS_ERROR_CODES, CHAT_WS_EVENTS } from './chat.constants';
 
 describe('ChatGateway', () => {
   let gateway: ChatGateway;
@@ -99,7 +100,7 @@ describe('ChatGateway', () => {
     expect(jwtService.verify).toHaveBeenCalledWith('access-token');
     expect(client.data.member).toBe(member);
     expect(client.join).toHaveBeenCalledWith('member:1');
-    expect(client.emit).toHaveBeenCalledWith('connection:ready', {
+    expect(client.emit).toHaveBeenCalledWith(CHAT_WS_EVENTS.CONNECTION_READY, {
       memberId: 1,
     });
     expect(client.disconnect).not.toHaveBeenCalled();
@@ -122,7 +123,9 @@ describe('ChatGateway', () => {
 
     await gateway.handleConnection(client);
 
-    expect(client.emit).toHaveBeenCalledWith('connection:error', {
+    expect(client.emit).toHaveBeenCalledWith(CHAT_WS_EVENTS.CONNECTION_ERROR, {
+      ok: false,
+      code: CHAT_WS_ERROR_CODES.UNAUTHORIZED,
       message: 'Unauthorized',
     });
     expect(client.disconnect).toHaveBeenCalledWith(true);
@@ -135,13 +138,26 @@ describe('ChatGateway', () => {
       status: ChatRoomStatus.REQUESTED,
     };
     chatService.getChatRoomDetail.mockResolvedValue(chatRoom);
+    const ack = jest.fn();
 
-    const result = await gateway.joinChatRoom(client, { chatRoomId: '10' });
+    const result = await gateway.joinChatRoom(
+      client,
+      { chatRoomId: '10' },
+      ack,
+    );
 
     expect(chatService.getChatRoomDetail).toHaveBeenCalledWith(member, 10);
     expect(client.join).toHaveBeenCalledWith('chat:10');
     expect(result).toEqual({
       event: 'chat:joined',
+      data: {
+        chatRoomId: 10,
+        chatRoom,
+      },
+    });
+    expect(ack).toHaveBeenCalledWith({
+      ok: true,
+      event: CHAT_WS_EVENTS.CHAT_JOINED,
       data: {
         chatRoomId: 10,
         chatRoom,
@@ -163,12 +179,47 @@ describe('ChatGateway', () => {
     });
   });
 
-  it('chatRoomId가 잘못되면 WsException을 던져야 한다', async () => {
+  it('chatRoomId가 잘못되면 표준 에러 이벤트와 ack를 반환해야 한다', async () => {
     const client = createClient({ member });
+    const ack = jest.fn();
 
     await expect(
-      gateway.joinChatRoom(client, { chatRoomId: 'invalid' }),
-    ).rejects.toThrow(WsException);
+      gateway.joinChatRoom(client, { chatRoomId: 'invalid' }, ack),
+    ).resolves.toBeUndefined();
+
+    const expectedPayload = {
+      ok: false,
+      code: CHAT_WS_ERROR_CODES.BAD_REQUEST,
+      message: 'chatRoomId must be a positive integer',
+    };
+    expect(ack).toHaveBeenCalledWith(expectedPayload);
+    expect(client.emit).toHaveBeenCalledWith(
+      CHAT_WS_EVENTS.CHAT_ERROR,
+      expectedPayload,
+    );
+  });
+
+  it('서비스 예외를 표준 에러 이벤트와 ack로 변환해야 한다', async () => {
+    const client = createClient({ member });
+    const ack = jest.fn();
+    chatService.getChatRoomDetail.mockRejectedValue(
+      new ForbiddenException('Chat room access denied'),
+    );
+
+    await expect(
+      gateway.joinChatRoom(client, { chatRoomId: 10 }, ack),
+    ).resolves.toBeUndefined();
+
+    const expectedPayload = {
+      ok: false,
+      code: CHAT_WS_ERROR_CODES.FORBIDDEN,
+      message: 'Chat room access denied',
+    };
+    expect(ack).toHaveBeenCalledWith(expectedPayload);
+    expect(client.emit).toHaveBeenCalledWith(
+      CHAT_WS_EVENTS.CHAT_ERROR,
+      expectedPayload,
+    );
   });
 
   it('메시지 전송 이벤트를 서비스로 위임하고 ack를 반환해야 한다', async () => {
@@ -181,12 +232,17 @@ describe('ChatGateway', () => {
       content: 'hello',
     };
     chatService.sendMessage.mockResolvedValue(message);
+    const ack = jest.fn();
 
-    const result = await gateway.sendMessage(client, {
-      chatRoomId: '10',
-      type: MessageType.TEXT,
-      content: 'hello',
-    });
+    const result = await gateway.sendMessage(
+      client,
+      {
+        chatRoomId: '10',
+        type: MessageType.TEXT,
+        content: 'hello',
+      },
+      ack,
+    );
 
     expect(chatService.sendMessage).toHaveBeenCalledWith(member, 10, {
       type: MessageType.TEXT,
@@ -196,22 +252,42 @@ describe('ChatGateway', () => {
       event: 'message:sent',
       data: message,
     });
+    expect(ack).toHaveBeenCalledWith({
+      ok: true,
+      event: CHAT_WS_EVENTS.MESSAGE_SENT,
+      data: message,
+    });
   });
 
   it('읽음 처리 이벤트를 서비스로 위임하고 ack를 반환해야 한다', async () => {
     const client = createClient({ member });
     chatService.markAsRead.mockResolvedValue({ updatedCount: 3 });
+    const ack = jest.fn();
 
-    const result = await gateway.markAsRead(client, {
-      chatRoomId: 10,
-      lastReadMessageId: 77,
-    });
+    const result = await gateway.markAsRead(
+      client,
+      {
+        chatRoomId: 10,
+        lastReadMessageId: 77,
+      },
+      ack,
+    );
 
     expect(chatService.markAsRead).toHaveBeenCalledWith(member, 10, {
       lastReadMessageId: 77,
     });
     expect(result).toEqual({
       event: 'message:read:ack',
+      data: {
+        chatRoomId: 10,
+        readerId: member.id,
+        lastReadMessageId: 77,
+        updatedCount: 3,
+      },
+    });
+    expect(ack).toHaveBeenCalledWith({
+      ok: true,
+      event: CHAT_WS_EVENTS.MESSAGE_READ_ACK,
       data: {
         chatRoomId: 10,
         readerId: member.id,

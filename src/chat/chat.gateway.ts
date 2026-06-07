@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
+  Ack,
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
@@ -9,7 +10,6 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-  WsException,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { AuthTokenBlacklistService } from '../auth/auth-token-blacklist.service';
@@ -20,7 +20,18 @@ import { ChatService } from './chat.service';
 import { ChatRealtimeService } from './chat-realtime.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
-import { CHAT_WS_EVENTS, CHAT_WS_NAMESPACE } from './chat.constants';
+import {
+  CHAT_WS_ERROR_CODES,
+  CHAT_WS_EVENTS,
+  CHAT_WS_NAMESPACE,
+  ChatWsEventName,
+} from './chat.constants';
+import {
+  ChatWsAck,
+  createChatWsErrorPayload,
+  createChatWsException,
+  createChatWsSuccessPayload,
+} from './chat-ws-response';
 
 interface JwtPayload {
   sub: number;
@@ -44,6 +55,11 @@ interface SendMessageSocketPayload extends SendMessageDto {
 
 interface ReadChatSocketPayload extends ReadChatDto {
   chatRoomId?: number | string;
+}
+
+interface ChatWsEventResponse<T> {
+  event: ChatWsEventName;
+  data: T;
 }
 
 @WebSocketGateway({
@@ -79,7 +95,13 @@ export class ChatGateway
       this.logger.warn(
         `Rejected websocket connection ${client.id}: ${this.getErrorMessage(error)}`,
       );
-      client.emit(CHAT_WS_EVENTS.CONNECTION_ERROR, { message: 'Unauthorized' });
+      client.emit(
+        CHAT_WS_EVENTS.CONNECTION_ERROR,
+        createChatWsErrorPayload(undefined, {
+          code: CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+          message: 'Unauthorized',
+        }),
+      );
       client.disconnect(true);
     }
   }
@@ -95,78 +117,103 @@ export class ChatGateway
   async joinChatRoom(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ChatRoomSocketPayload,
+    @Ack() ack?: ChatWsAck,
   ) {
-    const member = this.getAuthenticatedMember(client);
-    const chatRoomId = this.parseChatRoomId(payload);
-    const chatRoom = await this.chatService.getChatRoomDetail(
-      member,
-      chatRoomId,
-    );
+    return this.handleSocketEvent(
+      client,
+      ack,
+      CHAT_WS_EVENTS.CHAT_JOINED,
+      async () => {
+        const member = this.getAuthenticatedMember(client);
+        const chatRoomId = this.parseChatRoomId(payload);
+        const chatRoom = await this.chatService.getChatRoomDetail(
+          member,
+          chatRoomId,
+        );
 
-    await client.join(this.chatRealtimeService.getChatRoomName(chatRoomId));
+        await client.join(this.chatRealtimeService.getChatRoomName(chatRoomId));
 
-    return {
-      event: CHAT_WS_EVENTS.CHAT_JOINED,
-      data: {
-        chatRoomId,
-        chatRoom,
+        return {
+          chatRoomId,
+          chatRoom,
+        };
       },
-    };
+    );
   }
 
   @SubscribeMessage(CHAT_WS_EVENTS.CHAT_LEAVE)
   async leaveChatRoom(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ChatRoomSocketPayload,
+    @Ack() ack?: ChatWsAck,
   ) {
-    this.getAuthenticatedMember(client);
-    const chatRoomId = this.parseChatRoomId(payload);
+    return this.handleSocketEvent(
+      client,
+      ack,
+      CHAT_WS_EVENTS.CHAT_LEFT,
+      async () => {
+        this.getAuthenticatedMember(client);
+        const chatRoomId = this.parseChatRoomId(payload);
 
-    await client.leave(this.chatRealtimeService.getChatRoomName(chatRoomId));
+        await client.leave(
+          this.chatRealtimeService.getChatRoomName(chatRoomId),
+        );
 
-    return {
-      event: CHAT_WS_EVENTS.CHAT_LEFT,
-      data: {
-        chatRoomId,
+        return {
+          chatRoomId,
+        };
       },
-    };
+    );
   }
 
   @SubscribeMessage(CHAT_WS_EVENTS.MESSAGE_SEND)
   async sendMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: SendMessageSocketPayload,
+    @Ack() ack?: ChatWsAck,
   ) {
-    const member = this.getAuthenticatedMember(client);
-    const chatRoomId = this.parseChatRoomId(payload);
-    const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
-    const message = await this.chatService.sendMessage(member, chatRoomId, dto);
+    return this.handleSocketEvent(
+      client,
+      ack,
+      CHAT_WS_EVENTS.MESSAGE_SENT,
+      async () => {
+        const member = this.getAuthenticatedMember(client);
+        const chatRoomId = this.parseChatRoomId(payload);
+        const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
 
-    return {
-      event: CHAT_WS_EVENTS.MESSAGE_SENT,
-      data: message,
-    };
+        return this.chatService.sendMessage(member, chatRoomId, dto);
+      },
+    );
   }
 
   @SubscribeMessage(CHAT_WS_EVENTS.MESSAGE_READ)
   async markAsRead(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ReadChatSocketPayload,
+    @Ack() ack?: ChatWsAck,
   ) {
-    const member = this.getAuthenticatedMember(client);
-    const chatRoomId = this.parseChatRoomId(payload);
-    const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
-    const result = await this.chatService.markAsRead(member, chatRoomId, dto);
+    return this.handleSocketEvent(
+      client,
+      ack,
+      CHAT_WS_EVENTS.MESSAGE_READ_ACK,
+      async () => {
+        const member = this.getAuthenticatedMember(client);
+        const chatRoomId = this.parseChatRoomId(payload);
+        const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
+        const result = await this.chatService.markAsRead(
+          member,
+          chatRoomId,
+          dto,
+        );
 
-    return {
-      event: CHAT_WS_EVENTS.MESSAGE_READ_ACK,
-      data: {
-        chatRoomId,
-        readerId: member.id,
-        lastReadMessageId: dto.lastReadMessageId ?? null,
-        ...result,
+        return {
+          chatRoomId,
+          readerId: member.id,
+          lastReadMessageId: dto.lastReadMessageId ?? null,
+          ...result,
+        };
       },
-    };
+    );
   }
 
   private async authenticate(client: AuthenticatedSocket): Promise<Member> {
@@ -174,24 +221,36 @@ export class ChatGateway
     const authorization = `Bearer ${accessToken}`;
 
     if (await this.authTokenBlacklistService.isBlacklisted(authorization)) {
-      throw new WsException('Authentication token is blacklisted');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Authentication token is blacklisted',
+      );
     }
 
     let payload: JwtPayload;
     try {
       payload = this.jwtService.verify<JwtPayload>(accessToken);
     } catch {
-      throw new WsException('Invalid authentication token');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Invalid authentication token',
+      );
     }
 
     const memberId = Number(payload.sub);
     if (!memberId) {
-      throw new WsException('Invalid authentication token');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Invalid authentication token',
+      );
     }
 
     const member = await this.memberService.findById(memberId);
     if (!member || member.status !== MemberStatus.ACTIVE || member.isDeleted) {
-      throw new WsException('Inactive member cannot connect');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Inactive member cannot connect',
+      );
     }
 
     return member;
@@ -209,7 +268,10 @@ export class ChatGateway
       return this.stripBearerPrefix(authorization);
     }
 
-    throw new WsException('Authentication token is required');
+    throw createChatWsException(
+      CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+      'Authentication token is required',
+    );
   }
 
   private stripBearerPrefix(value: string): string {
@@ -219,7 +281,10 @@ export class ChatGateway
       : trimmed;
 
     if (!token) {
-      throw new WsException('Authentication token is required');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Authentication token is required',
+      );
     }
 
     return token;
@@ -228,7 +293,10 @@ export class ChatGateway
   private getAuthenticatedMember(client: AuthenticatedSocket): Member {
     const member = client.data.member;
     if (!member) {
-      throw new WsException('Authentication required');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.UNAUTHORIZED,
+        'Authentication required',
+      );
     }
     return member;
   }
@@ -236,9 +304,30 @@ export class ChatGateway
   private parseChatRoomId(payload: ChatRoomSocketPayload): number {
     const chatRoomId = Number(payload?.chatRoomId);
     if (!Number.isInteger(chatRoomId) || chatRoomId < 1) {
-      throw new WsException('chatRoomId must be a positive integer');
+      throw createChatWsException(
+        CHAT_WS_ERROR_CODES.BAD_REQUEST,
+        'chatRoomId must be a positive integer',
+      );
     }
     return chatRoomId;
+  }
+
+  private async handleSocketEvent<T>(
+    client: AuthenticatedSocket,
+    ack: ChatWsAck<T> | undefined,
+    event: ChatWsEventName,
+    handler: () => Promise<T>,
+  ): Promise<ChatWsEventResponse<T> | undefined> {
+    try {
+      const data = await handler();
+      ack?.(createChatWsSuccessPayload(event, data));
+      return { event, data };
+    } catch (error) {
+      const payload = createChatWsErrorPayload(error);
+      ack?.(payload);
+      client.emit(CHAT_WS_EVENTS.CHAT_ERROR, payload);
+      return undefined;
+    }
   }
 
   private getErrorMessage(error: unknown): string {

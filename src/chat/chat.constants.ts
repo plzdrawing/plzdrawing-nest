@@ -27,6 +27,7 @@ export const CHAT_WS_EVENTS = {
   CHAT_UPDATED: 'chat:updated',
   CHAT_STATUS_CHANGED: 'chat:statusChanged',
   CHAT_DELETED: 'chat:deleted',
+  CHAT_ERROR: 'chat:error',
   MESSAGE_SEND: 'message:send',
   MESSAGE_SENT: 'message:sent',
   MESSAGE_CREATED: 'message:created',
@@ -36,3 +37,15 @@ export const CHAT_WS_EVENTS = {
 
 export type ChatWsEventName =
   (typeof CHAT_WS_EVENTS)[keyof typeof CHAT_WS_EVENTS];
+
+export const CHAT_WS_ERROR_CODES = {
+  BAD_REQUEST: 'BAD_REQUEST',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  NOT_FOUND: 'NOT_FOUND',
+  PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type ChatWsErrorCode =
+  (typeof CHAT_WS_ERROR_CODES)[keyof typeof CHAT_WS_ERROR_CODES];

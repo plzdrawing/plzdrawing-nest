@@ -298,16 +298,41 @@ socket.on('connection:ready', ({ memberId }) => {
 
 `message:send`의 `type` 기본값은 `TEXT`입니다. 이미지 메시지는 먼저 `POST /api/chats/:id/messages/image-upload`으로 presigned upload URL과 `objectKey`를 받은 뒤, S3 업로드 완료 후 `type=IMAGE`와 `objectKey`를 전송합니다.
 
+클라이언트가 Socket.IO ack callback을 함께 전달하면 서버는 아래 형식으로 응답합니다.
+
+성공:
+
+```json
+{
+  "ok": true,
+  "event": "message:sent",
+  "data": {}
+}
+```
+
+실패:
+
+```json
+{
+  "ok": false,
+  "code": "BAD_REQUEST",
+  "message": "chatRoomId must be a positive integer"
+}
+```
+
+실패 시에는 같은 payload가 `chat:error` 이벤트로도 발행됩니다. 인증 연결 실패의 `connection:error`도 `{ ok, code, message }` 형식을 사용합니다.
+
 ### 서버 발행 이벤트
 
 | Event                | 대상 room                                   | 주요 payload                                                | 발생 시점                                                                       |
 | -------------------- | ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `connection:ready`   | 연결 소켓                                   | `{ memberId }`                                              | WebSocket 인증 성공                                                             |
-| `connection:error`   | 연결 소켓                                   | `{ message }`                                               | WebSocket 인증 실패                                                             |
+| `connection:error`   | 연결 소켓                                   | `{ ok: false, code, message }`                              | WebSocket 인증 실패                                                             |
 | `chat:created`       | `member:{requesterId}`, `member:{artistId}` | `{ chatRoomId, chatRoom }`                                  | 채팅방 신규 생성                                                                |
 | `chat:updated`       | `member:{requesterId}`, `member:{artistId}` | `{ chatRoomId, ... }`                                       | 마지막 메시지, 읽음, 상세 정보, 상태 변경 등 채팅방 목록 갱신 필요 시           |
 | `chat:statusChanged` | `chat:{chatRoomId}`                         | `{ chatRoomId, previousStatus, status, chatRoom?, ... }`    | 수락, 거절, 취소, 결제, 작업 시작, 시안 전송, 수정 요청, 최종 확인 등 상태 변경 |
 | `chat:deleted`       | `chat:{chatRoomId}`, 참여자 개인 room       | `{ chatRoomId, deletedByMemberId }`                         | 채팅방 삭제                                                                     |
+| `chat:error`         | 요청 소켓                                   | `{ ok: false, code, message }`                              | WebSocket 이벤트 처리 실패                                                      |
 | `message:created`    | `chat:{chatRoomId}`                         | `MessageResponseDto`                                        | REST 또는 WebSocket으로 메시지/시스템 카드 생성                                 |
 | `message:read`       | `chat:{chatRoomId}`                         | `{ chatRoomId, readerId, lastReadMessageId, updatedCount }` | 읽음 처리                                                                       |
 
@@ -318,8 +343,9 @@ socket.on('connection:ready', ({ memberId }) => {
 WebSocket 통합 테스트는 다음 흐름을 기준으로 추가합니다.
 
 - JWT access token으로 Socket.IO client가 `/chats` namespace에 연결되고 `connection:ready`를 받는지 확인
-- 잘못된 토큰 또는 누락된 토큰이면 `connection:error` 후 연결이 종료되는지 확인
+- 잘못된 토큰 또는 누락된 토큰이면 표준 `{ ok: false, code, message }` payload의 `connection:error` 후 연결이 종료되는지 확인
 - 참여자가 `chat:join`을 호출하면 `chat:joined`를 받고, 비참여자는 입장할 수 없는지 확인
+- 잘못된 `chatRoomId` 또는 권한 오류가 표준 ack와 `chat:error`로 전달되는지 확인
 - 한 사용자가 `message:send`를 호출하면 같은 채팅방 room의 다른 소켓이 `message:created`를 받는지 확인
 - REST `POST /api/chats/:id/messages`로 생성한 메시지도 `message:created`로 전달되는지 확인
 - `message:read` 호출 시 `message:read`와 `chat:updated`가 필요한 room에 전달되는지 확인
