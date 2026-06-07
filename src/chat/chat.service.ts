@@ -116,12 +116,23 @@ export class ChatService {
     });
     const saved = await this.chatRoomRepository.save(chatRoom);
 
-    await this.createRequestCardMessage(saved, member, post);
+    const requestCardMessage = await this.createRequestCardMessage(
+      saved,
+      member,
+      post,
+    );
     await this.touchChatRoom(saved.id);
+    const chatRoomDetail = await this.getChatRoomDetail(member, saved.id);
+    this.chatRealtimeService.emitToChatRoom(
+      saved.id,
+      'message:created',
+      requestCardMessage,
+    );
+    this.emitChatCreated(saved, chatRoomDetail);
 
     return {
       isExisting: false,
-      chatRoom: await this.getChatRoomDetail(member, saved.id),
+      chatRoom: chatRoomDetail,
     };
   }
 
@@ -244,6 +255,7 @@ export class ChatService {
 
     await this.messageRepository.delete({ chatRoomId: chatRoom.id });
     await this.chatRoomRepository.delete(chatRoom.id);
+    this.emitChatDeleted(chatRoom, member.id);
   }
 
   async createImageUpload(
@@ -842,7 +854,7 @@ export class ChatService {
     chatRoom: ChatRoom,
     member: Member,
     post: Post,
-  ): Promise<void> {
+  ): Promise<MessageResponseDto> {
     const content = JSON.stringify({
       kind: 'REQUEST_CARD',
       postId: post.id,
@@ -859,7 +871,8 @@ export class ChatService {
       content,
       imageUrl: post.thumbnailUrl ?? null,
     });
-    await this.messageRepository.save(message);
+    const saved = await this.messageRepository.save(message);
+    return this.mapMessage(saved);
   }
 
   private async touchChatRoom(chatRoomId: number): Promise<void> {
@@ -1129,6 +1142,39 @@ export class ChatService {
     );
     this.emitChatUpdated(chatRoom, {
       read: payload,
+    });
+  }
+
+  private emitChatCreated(
+    chatRoom: ChatRoom,
+    chatRoomDetail: ChatRoomDetailResponseDto,
+  ): void {
+    const payload = {
+      chatRoomId: chatRoom.id,
+      chatRoom: chatRoomDetail,
+    };
+
+    const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
+    memberIds.forEach((memberId) => {
+      this.chatRealtimeService.emitToMember(memberId, 'chat:created', payload);
+    });
+  }
+
+  private emitChatDeleted(chatRoom: ChatRoom, deletedByMemberId: number): void {
+    const payload = {
+      chatRoomId: chatRoom.id,
+      deletedByMemberId,
+    };
+
+    this.chatRealtimeService.emitToChatRoom(
+      chatRoom.id,
+      'chat:deleted',
+      payload,
+    );
+
+    const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
+    memberIds.forEach((memberId) => {
+      this.chatRealtimeService.emitToMember(memberId, 'chat:deleted', payload);
     });
   }
 

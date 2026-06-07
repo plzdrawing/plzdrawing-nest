@@ -303,7 +303,12 @@ describe('ChatService', () => {
       chatRoomRepository.save.mockResolvedValue(savedRoom);
       chatRoomRepository.update.mockResolvedValue(undefined);
       messageRepository.create.mockImplementation((payload: any) => payload);
-      messageRepository.save.mockResolvedValue(undefined);
+      messageRepository.save.mockImplementation((payload: any) => ({
+        id: 1001,
+        isRead: false,
+        sentAt: new Date('2026-02-14T00:00:00.000Z'),
+        ...payload,
+      }));
       jest.spyOn(service, 'getChatRoomDetail').mockResolvedValue(detail);
 
       const result = await service.createChatRoom(requester, dto);
@@ -327,6 +332,31 @@ describe('ChatService', () => {
       expect(chatRoomRepository.update).toHaveBeenCalledWith(
         savedRoom.id,
         expect.objectContaining({ updatedAt: expect.any(Date) }),
+      );
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        savedRoom.id,
+        'message:created',
+        expect.objectContaining({
+          chatRoomId: savedRoom.id,
+          senderId: requester.id,
+          type: MessageType.SYSTEM,
+        }),
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:created',
+        {
+          chatRoomId: savedRoom.id,
+          chatRoom: detail,
+        },
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        artist.id,
+        'chat:created',
+        {
+          chatRoomId: savedRoom.id,
+          chatRoom: detail,
+        },
       );
       expect(result).toEqual({
         isExisting: false,
@@ -417,6 +447,30 @@ describe('ChatService', () => {
 
       expect(messageRepository.delete).toHaveBeenCalledWith({ chatRoomId: 1 });
       expect(chatRoomRepository.delete).toHaveBeenCalledWith(1);
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        1,
+        'chat:deleted',
+        {
+          chatRoomId: 1,
+          deletedByMemberId: requester.id,
+        },
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:deleted',
+        {
+          chatRoomId: 1,
+          deletedByMemberId: requester.id,
+        },
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        artist.id,
+        'chat:deleted',
+        {
+          chatRoomId: 1,
+          deletedByMemberId: requester.id,
+        },
+      );
     });
   });
 
