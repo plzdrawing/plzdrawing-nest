@@ -54,6 +54,7 @@ import { SendDrawingDto } from './dto/send-drawing.dto';
 import { SendDrawingResponseDto } from './dto/send-drawing-response.dto';
 import { RevisionRequestDto } from './dto/revision-request.dto';
 import { UpdateChatRequestDto } from './dto/update-chat-request.dto';
+import { ChatRealtimeService } from './chat-realtime.service';
 
 @Injectable()
 export class ChatService {
@@ -66,6 +67,7 @@ export class ChatService {
     private readonly postRepository: Repository<Post>,
     private readonly dataSource: DataSource,
     private readonly awsService: AwsService,
+    private readonly chatRealtimeService: ChatRealtimeService,
   ) {}
 
   async createChatRoom(
@@ -360,7 +362,9 @@ export class ChatService {
     const saved = await this.messageRepository.save(message);
     await this.touchChatRoom(chatRoom.id);
 
-    return this.mapMessage(saved);
+    const response = await this.mapMessage(saved);
+    this.emitMessageCreated(chatRoom, response);
+    return response;
   }
 
   async markAsRead(
@@ -389,7 +393,9 @@ export class ChatService {
     }
 
     const result = await qb.execute();
-    return { updatedCount: result.affected ?? 0 };
+    const response = { updatedCount: result.affected ?? 0 };
+    this.emitMessagesRead(chatRoom, member.id, dto, response.updatedCount);
+    return response;
   }
 
   // ── 요청 내용 수정 (REQUESTED 상태, 요청자 전용) ──────────────────────────
@@ -1037,5 +1043,57 @@ export class ChatService {
 
   private isAbsoluteUrl(value: string): boolean {
     return value.startsWith('http://') || value.startsWith('https://');
+  }
+
+  private emitMessageCreated(
+    chatRoom: ChatRoom,
+    message: MessageResponseDto,
+  ): void {
+    this.chatRealtimeService.emitToChatRoom(
+      chatRoom.id,
+      'message:created',
+      message,
+    );
+    this.emitChatUpdated(chatRoom, {
+      lastMessage: message,
+    });
+  }
+
+  private emitMessagesRead(
+    chatRoom: ChatRoom,
+    readerId: number,
+    dto: ReadChatDto,
+    updatedCount: number,
+  ): void {
+    const payload = {
+      chatRoomId: chatRoom.id,
+      readerId,
+      lastReadMessageId: dto.lastReadMessageId ?? null,
+      updatedCount,
+    };
+
+    this.chatRealtimeService.emitToChatRoom(
+      chatRoom.id,
+      'message:read',
+      payload,
+    );
+    this.emitChatUpdated(chatRoom, {
+      read: payload,
+    });
+  }
+
+  private emitChatUpdated(
+    chatRoom: ChatRoom,
+    payload: Record<string, unknown>,
+  ): void {
+    const data = {
+      chatRoomId: chatRoom.id,
+      ...payload,
+    };
+
+    const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
+    memberIds.forEach((memberId) => {
+      this.chatRealtimeService.emitToMember(memberId, 'chat:updated', data);
+    });
   }
 }

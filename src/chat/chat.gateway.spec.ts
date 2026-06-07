@@ -1,7 +1,12 @@
 import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { AuthTokenBlacklistService } from '../auth/auth-token-blacklist.service';
-import { ChatRoomStatus, MemberRole, MemberStatus } from '../common/enums';
+import {
+  ChatRoomStatus,
+  MemberRole,
+  MemberStatus,
+  MessageType,
+} from '../common/enums';
 import { Member } from '../entities/member.entity';
 import { MemberService } from '../member/member.service';
 import { ChatGateway } from './chat.gateway';
@@ -13,7 +18,11 @@ describe('ChatGateway', () => {
   let jwtService: { verify: jest.Mock };
   let authTokenBlacklistService: { isBlacklisted: jest.Mock };
   let memberService: { findById: jest.Mock };
-  let chatService: { getChatRoomDetail: jest.Mock };
+  let chatService: {
+    getChatRoomDetail: jest.Mock;
+    sendMessage: jest.Mock;
+    markAsRead: jest.Mock;
+  };
   let chatRealtimeService: ChatRealtimeService;
 
   const member = {
@@ -58,6 +67,8 @@ describe('ChatGateway', () => {
     };
     chatService = {
       getChatRoomDetail: jest.fn(),
+      sendMessage: jest.fn(),
+      markAsRead: jest.fn(),
     };
     chatRealtimeService = new ChatRealtimeService();
 
@@ -158,5 +169,55 @@ describe('ChatGateway', () => {
     await expect(
       gateway.joinChatRoom(client, { chatRoomId: 'invalid' }),
     ).rejects.toThrow(WsException);
+  });
+
+  it('메시지 전송 이벤트를 서비스로 위임하고 ack를 반환해야 한다', async () => {
+    const client = createClient({ member });
+    const message = {
+      id: 100,
+      chatRoomId: 10,
+      senderId: member.id,
+      type: MessageType.TEXT,
+      content: 'hello',
+    };
+    chatService.sendMessage.mockResolvedValue(message);
+
+    const result = await gateway.sendMessage(client, {
+      chatRoomId: '10',
+      type: MessageType.TEXT,
+      content: 'hello',
+    });
+
+    expect(chatService.sendMessage).toHaveBeenCalledWith(member, 10, {
+      type: MessageType.TEXT,
+      content: 'hello',
+    });
+    expect(result).toEqual({
+      event: 'message:sent',
+      data: message,
+    });
+  });
+
+  it('읽음 처리 이벤트를 서비스로 위임하고 ack를 반환해야 한다', async () => {
+    const client = createClient({ member });
+    chatService.markAsRead.mockResolvedValue({ updatedCount: 3 });
+
+    const result = await gateway.markAsRead(client, {
+      chatRoomId: 10,
+      lastReadMessageId: 77,
+    });
+
+    expect(chatService.markAsRead).toHaveBeenCalledWith(member, 10, {
+      lastReadMessageId: 77,
+    });
+    expect(result).toEqual({
+      event: 'message:read:ack',
+      data: {
+        chatRoomId: 10,
+        readerId: member.id,
+        lastReadMessageId: 77,
+        updatedCount: 3,
+      },
+    });
   });
 });

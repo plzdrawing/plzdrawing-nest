@@ -31,6 +31,7 @@ import { MessageListQueryDto } from './dto/message-list-query.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
 import { ChatRoomDetailResponseDto } from './dto/chat-room-detail-response.dto';
+import { ChatRealtimeService } from './chat-realtime.service';
 
 describe('ChatService', () => {
   let service: ChatService;
@@ -46,6 +47,7 @@ describe('ChatService', () => {
   let txWalletRepository: any;
   let txWalletTransactionRepository: any;
   let awsService: any;
+  let chatRealtimeService: any;
 
   const requester: Member = {
     id: 1,
@@ -182,6 +184,11 @@ describe('ChatService', () => {
       createPresignedGetUrl: jest.fn(),
     };
 
+    chatRealtimeService = {
+      emitToChatRoom: jest.fn(),
+      emitToMember: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChatService,
@@ -201,6 +208,10 @@ describe('ChatService', () => {
         {
           provide: AwsService,
           useValue: awsService,
+        },
+        {
+          provide: ChatRealtimeService,
+          useValue: chatRealtimeService,
         },
       ],
     }).compile();
@@ -858,6 +869,27 @@ describe('ChatService', () => {
       );
       expect(result.content).toBe('hello');
       expect(result.type).toBe(MessageType.TEXT);
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        1,
+        'message:created',
+        result,
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: 1,
+          lastMessage: result,
+        }),
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        artist.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: 1,
+          lastMessage: result,
+        }),
+      );
     });
 
     it('상대 경로 이미지 키면 사전 서명 URL을 반환해야 한다', async () => {
@@ -921,6 +953,26 @@ describe('ChatService', () => {
         lastReadMessageId: 100,
       });
       expect(result).toEqual({ updatedCount: 3 });
+      expect(chatRealtimeService.emitToChatRoom).toHaveBeenCalledWith(
+        1,
+        'message:read',
+        {
+          chatRoomId: 1,
+          readerId: requester.id,
+          lastReadMessageId: 100,
+          updatedCount: 3,
+        },
+      );
+      expect(chatRealtimeService.emitToMember).toHaveBeenCalledWith(
+        requester.id,
+        'chat:updated',
+        expect.objectContaining({
+          chatRoomId: 1,
+          read: expect.objectContaining({
+            updatedCount: 3,
+          }),
+        }),
+      );
     });
   });
 });

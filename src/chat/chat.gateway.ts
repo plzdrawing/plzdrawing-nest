@@ -18,6 +18,8 @@ import { Member } from '../entities/member.entity';
 import { MemberService } from '../member/member.service';
 import { ChatService } from './chat.service';
 import { ChatRealtimeService } from './chat-realtime.service';
+import { SendMessageDto } from './dto/send-message.dto';
+import { ReadChatDto } from './dto/read-chat.dto';
 
 interface JwtPayload {
   sub: number;
@@ -32,6 +34,14 @@ type AuthenticatedSocket = Socket & {
 };
 
 interface ChatRoomSocketPayload {
+  chatRoomId?: number | string;
+}
+
+interface SendMessageSocketPayload extends SendMessageDto {
+  chatRoomId?: number | string;
+}
+
+interface ReadChatSocketPayload extends ReadChatDto {
   chatRoomId?: number | string;
 }
 
@@ -126,6 +136,43 @@ export class ChatGateway
       event: 'chat:left',
       data: {
         chatRoomId,
+      },
+    };
+  }
+
+  @SubscribeMessage('message:send')
+  async sendMessage(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: SendMessageSocketPayload,
+  ) {
+    const member = this.getAuthenticatedMember(client);
+    const chatRoomId = this.parseChatRoomId(payload);
+    const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
+    const message = await this.chatService.sendMessage(member, chatRoomId, dto);
+
+    return {
+      event: 'message:sent',
+      data: message,
+    };
+  }
+
+  @SubscribeMessage('message:read')
+  async markAsRead(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: ReadChatSocketPayload,
+  ) {
+    const member = this.getAuthenticatedMember(client);
+    const chatRoomId = this.parseChatRoomId(payload);
+    const { chatRoomId: _chatRoomId, ...dto } = payload ?? {};
+    const result = await this.chatService.markAsRead(member, chatRoomId, dto);
+
+    return {
+      event: 'message:read:ack',
+      data: {
+        chatRoomId,
+        readerId: member.id,
+        lastReadMessageId: dto.lastReadMessageId ?? null,
+        ...result,
       },
     };
   }
