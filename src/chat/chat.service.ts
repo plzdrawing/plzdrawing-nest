@@ -28,6 +28,7 @@ import {
   CHAT_IMAGE_ALLOWED_CONTENT_TYPES,
   CHAT_IMAGE_DOWNLOAD_EXPIRES_IN_SECONDS,
   CHAT_IMAGE_UPLOAD_EXPIRES_IN_SECONDS,
+  CHAT_WS_EVENTS,
   MAX_CHAT_IMAGE_SIZE_BYTES,
 } from './chat.constants';
 import { CreateChatRoomDto } from './dto/create-chat-room.dto';
@@ -125,7 +126,7 @@ export class ChatService {
     const chatRoomDetail = await this.getChatRoomDetail(member, saved.id);
     this.chatRealtimeService.emitToChatRoom(
       saved.id,
-      'message:created',
+      CHAT_WS_EVENTS.MESSAGE_CREATED,
       requestCardMessage,
     );
     this.emitChatCreated(saved, chatRoomDetail);
@@ -1114,7 +1115,7 @@ export class ChatService {
   ): void {
     this.chatRealtimeService.emitToChatRoom(
       chatRoom.id,
-      'message:created',
+      CHAT_WS_EVENTS.MESSAGE_CREATED,
       message,
     );
     this.emitChatUpdated(chatRoom, {
@@ -1137,7 +1138,7 @@ export class ChatService {
 
     this.chatRealtimeService.emitToChatRoom(
       chatRoom.id,
-      'message:read',
+      CHAT_WS_EVENTS.MESSAGE_READ,
       payload,
     );
     this.emitChatUpdated(chatRoom, {
@@ -1156,7 +1157,11 @@ export class ChatService {
 
     const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
     memberIds.forEach((memberId) => {
-      this.chatRealtimeService.emitToMember(memberId, 'chat:created', payload);
+      this.chatRealtimeService.emitToMember(
+        memberId,
+        CHAT_WS_EVENTS.CHAT_CREATED,
+        payload,
+      );
     });
   }
 
@@ -1168,13 +1173,17 @@ export class ChatService {
 
     this.chatRealtimeService.emitToChatRoom(
       chatRoom.id,
-      'chat:deleted',
+      CHAT_WS_EVENTS.CHAT_DELETED,
       payload,
     );
 
     const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
     memberIds.forEach((memberId) => {
-      this.chatRealtimeService.emitToMember(memberId, 'chat:deleted', payload);
+      this.chatRealtimeService.emitToMember(
+        memberId,
+        CHAT_WS_EVENTS.CHAT_DELETED,
+        payload,
+      );
     });
   }
 
@@ -1194,7 +1203,7 @@ export class ChatService {
 
     this.chatRealtimeService.emitToChatRoom(
       chatRoom.id,
-      'chat:statusChanged',
+      CHAT_WS_EVENTS.CHAT_STATUS_CHANGED,
       payload,
     );
     this.emitChatUpdated(chatRoom, payload);
@@ -1221,7 +1230,11 @@ export class ChatService {
 
     const memberIds = new Set([chatRoom.requesterId, chatRoom.artistId]);
     memberIds.forEach((memberId) => {
-      this.chatRealtimeService.emitToMember(memberId, 'chat:updated', data);
+      this.chatRealtimeService.emitToMember(
+        memberId,
+        CHAT_WS_EVENTS.CHAT_UPDATED,
+        data,
+      );
     });
   }
 }

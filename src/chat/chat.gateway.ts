@@ -20,6 +20,7 @@ import { ChatService } from './chat.service';
 import { ChatRealtimeService } from './chat-realtime.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
+import { CHAT_WS_EVENTS, CHAT_WS_NAMESPACE } from './chat.constants';
 
 interface JwtPayload {
   sub: number;
@@ -51,7 +52,7 @@ const CHAT_WS_CORS_ORIGINS = [
 ];
 
 @WebSocketGateway({
-  namespace: 'chats',
+  namespace: CHAT_WS_NAMESPACE,
   cors: {
     origin: CHAT_WS_CORS_ORIGINS,
     credentials: true,
@@ -82,12 +83,12 @@ export class ChatGateway
       const member = await this.authenticate(client);
       client.data.member = member;
       await client.join(this.chatRealtimeService.getMemberRoomName(member.id));
-      client.emit('connection:ready', { memberId: member.id });
+      client.emit(CHAT_WS_EVENTS.CONNECTION_READY, { memberId: member.id });
     } catch (error) {
       this.logger.warn(
         `Rejected websocket connection ${client.id}: ${this.getErrorMessage(error)}`,
       );
-      client.emit('connection:error', { message: 'Unauthorized' });
+      client.emit(CHAT_WS_EVENTS.CONNECTION_ERROR, { message: 'Unauthorized' });
       client.disconnect(true);
     }
   }
@@ -99,7 +100,7 @@ export class ChatGateway
     }
   }
 
-  @SubscribeMessage('chat:join')
+  @SubscribeMessage(CHAT_WS_EVENTS.CHAT_JOIN)
   async joinChatRoom(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ChatRoomSocketPayload,
@@ -114,7 +115,7 @@ export class ChatGateway
     await client.join(this.chatRealtimeService.getChatRoomName(chatRoomId));
 
     return {
-      event: 'chat:joined',
+      event: CHAT_WS_EVENTS.CHAT_JOINED,
       data: {
         chatRoomId,
         chatRoom,
@@ -122,7 +123,7 @@ export class ChatGateway
     };
   }
 
-  @SubscribeMessage('chat:leave')
+  @SubscribeMessage(CHAT_WS_EVENTS.CHAT_LEAVE)
   async leaveChatRoom(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ChatRoomSocketPayload,
@@ -133,14 +134,14 @@ export class ChatGateway
     await client.leave(this.chatRealtimeService.getChatRoomName(chatRoomId));
 
     return {
-      event: 'chat:left',
+      event: CHAT_WS_EVENTS.CHAT_LEFT,
       data: {
         chatRoomId,
       },
     };
   }
 
-  @SubscribeMessage('message:send')
+  @SubscribeMessage(CHAT_WS_EVENTS.MESSAGE_SEND)
   async sendMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: SendMessageSocketPayload,
@@ -151,12 +152,12 @@ export class ChatGateway
     const message = await this.chatService.sendMessage(member, chatRoomId, dto);
 
     return {
-      event: 'message:sent',
+      event: CHAT_WS_EVENTS.MESSAGE_SENT,
       data: message,
     };
   }
 
-  @SubscribeMessage('message:read')
+  @SubscribeMessage(CHAT_WS_EVENTS.MESSAGE_READ)
   async markAsRead(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: ReadChatSocketPayload,
@@ -167,7 +168,7 @@ export class ChatGateway
     const result = await this.chatService.markAsRead(member, chatRoomId, dto);
 
     return {
-      event: 'message:read:ack',
+      event: CHAT_WS_EVENTS.MESSAGE_READ_ACK,
       data: {
         chatRoomId,
         readerId: member.id,
