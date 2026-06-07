@@ -7,6 +7,7 @@ NestJS 기반 `plzdrawing` 백엔드입니다.
 - 일반 로그인, 소셜 로그인, 로그아웃
 - 설정 홈, 알림 설정, 앱 정보, 약관 조회/관리
 - 공지사항, 1:1 문의, 관리자 운영 API
+- 게시글 기반 채팅/작업 의뢰 플로우 및 WebSocket 실시간 이벤트
 - 코인 상품, 코인 주문, 토스 결제 승인/취소/웹훅 처리
 - 지갑/거래원장
 - 환전계좌 등록/관리/관리자 인증
@@ -207,6 +208,28 @@ pnpm test
 - `GET /api/inquiry/v1/admin/:id`
 - `PATCH /api/inquiry/v1/admin/:id`
 
+### 채팅/실시간
+
+- `POST /api/chats`
+- `GET /api/chats`
+- `GET /api/chats/:id`
+- `DELETE /api/chats/:id`
+- `POST /api/chats/request-images/upload-url`
+- `GET /api/chats/:id/messages`
+- `POST /api/chats/:id/messages`
+- `POST /api/chats/:id/messages/image-upload`
+- `PATCH /api/chats/:id/read`
+- `PATCH /api/chats/:id/request`
+- `PATCH /api/chats/:id/accept`
+- `PATCH /api/chats/:id/reject`
+- `PATCH /api/chats/:id/cancel`
+- `PATCH /api/chats/:id/request-price-change`
+- `PATCH /api/chats/:id/pay`
+- `PATCH /api/chats/:id/start`
+- `POST /api/chats/:id/send-drawing`
+- `POST /api/chats/:id/revision`
+- `PATCH /api/chats/:id/confirm`
+
 ### 코인/지갑
 
 - `GET /api/coin-shop/v1/products`
@@ -230,6 +253,74 @@ pnpm test
 - `GET /api/withdraw-accounts/v1/admin`
 - `GET /api/withdraw-accounts/v1/admin/:id`
 - `PATCH /api/withdraw-accounts/v1/admin/:id/verify`
+
+## 채팅 WebSocket
+
+채팅은 REST API로 방 생성, 상태 변경, 이미지 업로드 URL 발급 같은 명령을 처리하고, Socket.IO WebSocket으로 메시지/읽음/상태 변경 이벤트를 실시간 전달합니다.
+
+### 연결
+
+- namespace: `/chats`
+- 예시 URL: `http://localhost:3000/chats`
+- 인증: JWT access token 필요
+- 토큰 전달 방법:
+  - Socket.IO auth: `{ token: '<access-token>' }`
+  - 또는 handshake header: `Authorization: Bearer <access-token>`
+- 연결 성공 시 서버는 해당 소켓을 회원 개인 room인 `member:{memberId}`에 자동 입장시키고 `connection:ready`를 발행합니다.
+- 토큰 누락, 블랙리스트 토큰, 비활성/탈퇴 회원은 `connection:error` 발행 후 연결을 종료합니다.
+
+클라이언트 연결 예시:
+
+```ts
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:3000/chats', {
+  auth: { token: accessToken },
+  transports: ['websocket', 'polling'],
+});
+
+socket.on('connection:ready', ({ memberId }) => {
+  console.log('connected member:', memberId);
+});
+```
+
+### 클라이언트 발행 이벤트
+
+| Event          | Payload                                                                          | Response event     | 설명                                                                       |
+| -------------- | -------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `chat:join`    | `{ chatRoomId }`                                                                 | `chat:joined`      | 채팅방 접근 권한을 확인하고 `chat:{chatRoomId}` room에 입장합니다.         |
+| `chat:leave`   | `{ chatRoomId }`                                                                 | `chat:left`        | `chat:{chatRoomId}` room에서 퇴장합니다.                                   |
+| `message:send` | `{ chatRoomId, type?, content?, objectKey?, size?, mimeType?, width?, height? }` | `message:sent`     | REST 메시지 전송과 같은 서비스 로직으로 텍스트/이미지 메시지를 생성합니다. |
+| `message:read` | `{ chatRoomId, lastReadMessageId? }`                                             | `message:read:ack` | 상대방이 보낸 미읽음 메시지를 읽음 처리합니다.                             |
+
+`message:send`의 `type` 기본값은 `TEXT`입니다. 이미지 메시지는 먼저 `POST /api/chats/:id/messages/image-upload`으로 presigned upload URL과 `objectKey`를 받은 뒤, S3 업로드 완료 후 `type=IMAGE`와 `objectKey`를 전송합니다.
+
+### 서버 발행 이벤트
+
+| Event                | 대상 room                                   | 주요 payload                                                | 발생 시점                                                                       |
+| -------------------- | ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `connection:ready`   | 연결 소켓                                   | `{ memberId }`                                              | WebSocket 인증 성공                                                             |
+| `connection:error`   | 연결 소켓                                   | `{ message }`                                               | WebSocket 인증 실패                                                             |
+| `chat:created`       | `member:{requesterId}`, `member:{artistId}` | `{ chatRoomId, chatRoom }`                                  | 채팅방 신규 생성                                                                |
+| `chat:updated`       | `member:{requesterId}`, `member:{artistId}` | `{ chatRoomId, ... }`                                       | 마지막 메시지, 읽음, 상세 정보, 상태 변경 등 채팅방 목록 갱신 필요 시           |
+| `chat:statusChanged` | `chat:{chatRoomId}`                         | `{ chatRoomId, previousStatus, status, chatRoom?, ... }`    | 수락, 거절, 취소, 결제, 작업 시작, 시안 전송, 수정 요청, 최종 확인 등 상태 변경 |
+| `chat:deleted`       | `chat:{chatRoomId}`, 참여자 개인 room       | `{ chatRoomId, deletedByMemberId }`                         | 채팅방 삭제                                                                     |
+| `message:created`    | `chat:{chatRoomId}`                         | `MessageResponseDto`                                        | REST 또는 WebSocket으로 메시지/시스템 카드 생성                                 |
+| `message:read`       | `chat:{chatRoomId}`                         | `{ chatRoomId, readerId, lastReadMessageId, updatedCount }` | 읽음 처리                                                                       |
+
+채팅방 상세를 실시간으로 보고 싶은 클라이언트는 연결 후 `chat:join`을 호출해 `chat:{chatRoomId}` room에 들어가야 합니다. 채팅 목록 화면은 자동 입장되는 `member:{memberId}` room의 `chat:created`, `chat:updated`, `chat:deleted` 이벤트를 구독하면 됩니다.
+
+### 통합 테스트 기준
+
+WebSocket 통합 테스트는 다음 흐름을 기준으로 추가합니다.
+
+- JWT access token으로 Socket.IO client가 `/chats` namespace에 연결되고 `connection:ready`를 받는지 확인
+- 잘못된 토큰 또는 누락된 토큰이면 `connection:error` 후 연결이 종료되는지 확인
+- 참여자가 `chat:join`을 호출하면 `chat:joined`를 받고, 비참여자는 입장할 수 없는지 확인
+- 한 사용자가 `message:send`를 호출하면 같은 채팅방 room의 다른 소켓이 `message:created`를 받는지 확인
+- REST `POST /api/chats/:id/messages`로 생성한 메시지도 `message:created`로 전달되는지 확인
+- `message:read` 호출 시 `message:read`와 `chat:updated`가 필요한 room에 전달되는지 확인
+- 상태 변경 REST API, 예를 들어 `PATCH /api/chats/:id/accept`, `PATCH /api/chats/:id/pay`, `PATCH /api/chats/:id/confirm` 실행 후 `chat:statusChanged`와 `chat:updated`가 발행되는지 확인
 
 ## 운영 메모
 
