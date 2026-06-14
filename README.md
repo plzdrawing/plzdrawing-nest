@@ -41,6 +41,14 @@ pnpm db:migration:revert
 pnpm test
 ```
 
+커버리지 확인:
+
+```bash
+pnpm test:cov
+```
+
+커버리지 결과는 터미널 요약과 `coverage/lcov-report/index.html`, `coverage/coverage-summary.json`으로 생성됩니다. 단위 테스트 커버리지 기준선은 statements `70%`, branches `55%`, functions `50%`, lines `70%`입니다.
+
 특정 스펙만 실행할 때:
 
 ```bash

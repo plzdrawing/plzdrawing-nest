@@ -38,7 +38,6 @@ import { MessageListResponseDto } from './dto/message-list-response.dto';
 import { AcceptChatDto } from './dto/accept-chat.dto';
 import { RejectChatDto } from './dto/reject-chat.dto';
 import { RequestPriceChangeDto } from './dto/request-price-change.dto';
-import { PayChatDto } from './dto/pay-chat.dto';
 import { PayChatResponseDto } from './dto/pay-chat-response.dto';
 import { SendDrawingDto } from './dto/send-drawing.dto';
 import { SendDrawingResponseDto } from './dto/send-drawing-response.dto';
@@ -476,7 +475,6 @@ export class ChatController {
       'ACCEPTED 상태에서 요청자 코인을 차감하고 작가에게 지급한 뒤 PAID 상태로 전환합니다. 지갑 거래내역과 PaymentHistory가 함께 생성됩니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
-  @ApiBody({ type: PayChatDto })
   @ApiResponse({
     status: 200,
     description: '결제 성공 — feedbackCount 반환',
@@ -492,7 +490,6 @@ export class ChatController {
   async payChatRoom(
     @GetUser() member: Member,
     @Param('id') id: string,
-    @Body() _dto: PayChatDto,
   ): Promise<PayChatResponseDto> {
     return this.chatService.payChatRoom(member, +id);
   }
