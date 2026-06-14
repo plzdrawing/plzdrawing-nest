@@ -30,6 +30,7 @@ import { ChatImageUploadRequestDto } from './dto/chat-image-upload-request.dto';
 import { ChatImageUploadResponseDto } from './dto/chat-image-upload-response.dto';
 import { MessageListQueryDto } from './dto/message-list-query.dto';
 import { ReadChatDto } from './dto/read-chat.dto';
+import { ReadChatResponseDto } from './dto/read-chat-response.dto';
 import { ChatRoomCreateResponseDto } from './dto/chat-room-create-response.dto';
 import { ChatRoomListResponseDto } from './dto/chat-room-list-response.dto';
 import { ChatRoomDetailResponseDto } from './dto/chat-room-detail-response.dto';
@@ -319,9 +320,7 @@ export class ChatController {
   @ApiResponse({
     status: 200,
     description: '읽음 처리 성공',
-    schema: {
-      example: { updatedCount: 3 },
-    },
+    type: ReadChatResponseDto,
   })
   @ApiResponse({ status: 401, description: '인증 실패' })
   @ApiResponse({ status: 403, description: '채팅방 접근 권한 없음' })
@@ -330,7 +329,7 @@ export class ChatController {
     @GetUser() member: Member,
     @Param('id') id: string,
     @Body() dto: ReadChatDto,
-  ): Promise<{ updatedCount: number }> {
+  ): Promise<ReadChatResponseDto> {
     return this.chatService.markAsRead(member, +id, dto);
   }
 
@@ -472,7 +471,7 @@ export class ChatController {
   @ApiOperation({
     summary: '결제 (요청자)',
     description:
-      'ACCEPTED 상태에서 요청자 코인을 차감하고 작가에게 지급한 뒤 PAID 상태로 전환합니다. 지갑 거래내역과 PaymentHistory가 함께 생성됩니다.',
+      'ACCEPTED 상태에서 요청자 코인을 차감하고 작가에게 지급한 뒤 PAID 상태로 전환합니다. 요청 body는 사용하지 않으며, 지갑 거래내역과 PaymentHistory가 함께 생성됩니다.',
   })
   @ApiParam({ name: 'id', description: '채팅방 ID', example: 1 })
   @ApiResponse({
