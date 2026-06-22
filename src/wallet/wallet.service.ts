@@ -32,6 +32,10 @@ import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { TossWebhookDto } from './dto/toss-webhook.dto';
 import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
+import {
+  WalletBalanceMismatchPageResponseDto,
+  WalletBalanceMismatchResponseDto,
+} from './dto/wallet-balance-mismatch-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
 import {
@@ -40,6 +44,15 @@ import {
 } from './toss-payments.service';
 
 const COIN_ORDER_SOURCE_TYPE = 'COIN_ORDER';
+
+type WalletBalanceMismatchRaw = {
+  memberId: string | number;
+  memberEmail: string | null;
+  memberNickname: string | null;
+  walletBalance: string | number;
+  transactionBalance: string | number | null;
+  difference: string | number;
+};
 
 @Injectable()
 export class WalletService {
@@ -94,6 +107,28 @@ export class WalletService {
           ),
       ),
       total,
+      page,
+      limit,
+    };
+  }
+
+  async getWalletBalanceMismatchesForAdmin(
+    member: Member,
+    paginationDto: PaginationDto,
+  ): Promise<WalletBalanceMismatchPageResponseDto> {
+    this.assertAdmin(member);
+
+    const { page = 1, limit = 10 } = paginationDto;
+    const totalRows =
+      await this.createWalletBalanceMismatchQuery().getRawMany();
+    const rows = await this.createWalletBalanceMismatchQuery()
+      .offset((page - 1) * limit)
+      .limit(limit)
+      .getRawMany<WalletBalanceMismatchRaw>();
+
+    return {
+      data: rows.map((row) => this.mapWalletBalanceMismatch(row)),
+      total: totalRows.length,
       page,
       limit,
     };
@@ -909,6 +944,57 @@ export class WalletService {
       order.cancelledAt ?? null,
       order.createdAt,
     );
+  }
+
+  private createWalletBalanceMismatchQuery() {
+    const transactionSum = 'COALESCE(SUM(walletTransaction.coin_amount), 0)';
+    const difference = `wallet.balance - ${transactionSum}`;
+
+    return this.walletRepository
+      .createQueryBuilder('wallet')
+      .leftJoin(Member, 'member', 'member.id = wallet.member_id')
+      .leftJoin(
+        WalletTransaction,
+        'walletTransaction',
+        'walletTransaction.member_id = wallet.member_id AND walletTransaction.status = :completedStatus',
+        { completedStatus: WalletTransactionStatus.COMPLETED },
+      )
+      .select('wallet.member_id', 'memberId')
+      .addSelect('member.email', 'memberEmail')
+      .addSelect('member.nickname', 'memberNickname')
+      .addSelect('wallet.balance', 'walletBalance')
+      .addSelect(transactionSum, 'transactionBalance')
+      .addSelect(difference, 'difference')
+      .groupBy('wallet.id')
+      .addGroupBy('wallet.member_id')
+      .addGroupBy('wallet.balance')
+      .addGroupBy('member.email')
+      .addGroupBy('member.nickname')
+      .having(`${difference} <> 0`)
+      .orderBy(`ABS(${difference})`, 'DESC')
+      .addOrderBy('wallet.member_id', 'ASC');
+  }
+
+  private mapWalletBalanceMismatch(
+    raw: WalletBalanceMismatchRaw,
+  ): WalletBalanceMismatchResponseDto {
+    return new WalletBalanceMismatchResponseDto(
+      this.toNumber(raw.memberId),
+      raw.memberEmail ?? null,
+      raw.memberNickname ?? null,
+      this.toNumber(raw.walletBalance),
+      this.toNumber(raw.transactionBalance),
+      this.toNumber(raw.difference),
+    );
+  }
+
+  private toNumber(value: string | number | null): number {
+    if (value === null) {
+      return 0;
+    }
+
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
 
   private generateOrderCode(): string {

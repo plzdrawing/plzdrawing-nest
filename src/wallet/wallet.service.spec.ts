@@ -1,6 +1,11 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { MemberRole, PaymentMethod, PaymentStatus } from '../common/enums';
+import {
+  MemberRole,
+  PaymentMethod,
+  PaymentStatus,
+  WalletTransactionStatus,
+} from '../common/enums';
 import { CoinProduct } from '../entities/coin-product.entity';
 import { CoinOrder } from '../entities/coin-order.entity';
 import { Member } from '../entities/member.entity';
@@ -20,6 +25,7 @@ describe('WalletService', () => {
     findOne: jest.fn(),
     save: jest.fn(),
     create: jest.fn((data) => data),
+    createQueryBuilder: jest.fn(),
   };
 
   const walletTransactionRepository = {
@@ -240,6 +246,72 @@ describe('WalletService', () => {
     );
 
     expect(result.memberNickname).toBe('그림좋아');
+  });
+
+  it('관리자가 아니면 지갑 잔액 불일치 점검을 조회할 수 없어야 한다', async () => {
+    await expect(
+      service.getWalletBalanceMismatchesForAdmin(
+        { role: MemberRole.ROLE_MEMBER } as Member,
+        { page: 1, limit: 10 },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(walletRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('관리자는 지갑 잔액과 거래원장 합계가 다른 회원 목록을 조회할 수 있어야 한다', async () => {
+    const allRows = [
+      createWalletBalanceMismatchRaw({
+        memberId: '10',
+        walletBalance: '100',
+        transactionBalance: '90',
+        difference: '10',
+      }),
+      createWalletBalanceMismatchRaw({
+        memberId: '11',
+        walletBalance: '20',
+        transactionBalance: '30',
+        difference: '-10',
+      }),
+    ];
+    const countQueryBuilder =
+      createWalletBalanceMismatchQueryBuilderMock(allRows);
+    const pageQueryBuilder = createWalletBalanceMismatchQueryBuilderMock([
+      allRows[1],
+    ]);
+    walletRepository.createQueryBuilder
+      .mockReturnValueOnce(countQueryBuilder)
+      .mockReturnValueOnce(pageQueryBuilder);
+
+    const result = await service.getWalletBalanceMismatchesForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      { page: 2, limit: 1 },
+    );
+
+    expect(walletRepository.createQueryBuilder).toHaveBeenCalledTimes(2);
+    expect(pageQueryBuilder.leftJoin).toHaveBeenCalledWith(
+      WalletTransaction,
+      'walletTransaction',
+      'walletTransaction.member_id = wallet.member_id AND walletTransaction.status = :completedStatus',
+      { completedStatus: WalletTransactionStatus.COMPLETED },
+    );
+    expect(pageQueryBuilder.offset).toHaveBeenCalledWith(1);
+    expect(pageQueryBuilder.limit).toHaveBeenCalledWith(1);
+    expect(result).toEqual({
+      data: [
+        expect.objectContaining({
+          memberId: 11,
+          memberEmail: 'user11@example.com',
+          memberNickname: '회원11',
+          walletBalance: 20,
+          transactionBalance: 30,
+          difference: -10,
+        }),
+      ],
+      total: 2,
+      page: 2,
+      limit: 1,
+    });
   });
 
   it('이미 사용한 paymentKey면 결제 승인을 막아야 한다', async () => {
@@ -737,5 +809,37 @@ function createQueryBuilderMock(result: any[]) {
     take: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     getManyAndCount: jest.fn().mockResolvedValue([result, result.length]),
+  };
+}
+
+function createWalletBalanceMismatchRaw(overrides: {
+  memberId: string;
+  walletBalance: string;
+  transactionBalance: string;
+  difference: string;
+}) {
+  return {
+    memberId: overrides.memberId,
+    memberEmail: `user${overrides.memberId}@example.com`,
+    memberNickname: `회원${overrides.memberId}`,
+    walletBalance: overrides.walletBalance,
+    transactionBalance: overrides.transactionBalance,
+    difference: overrides.difference,
+  };
+}
+
+function createWalletBalanceMismatchQueryBuilderMock(result: any[]) {
+  return {
+    leftJoin: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
+    having: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    offset: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn().mockResolvedValue(result),
   };
 }
