@@ -24,6 +24,7 @@ describe('WalletService', () => {
 
   const walletTransactionRepository = {
     create: jest.fn((data) => data),
+    findOne: jest.fn(),
     save: jest.fn(),
   };
 
@@ -55,6 +56,7 @@ describe('WalletService', () => {
 
   const txWalletTransactionRepository = {
     create: jest.fn((data) => data),
+    findOne: jest.fn(),
     save: jest.fn(),
   };
 
@@ -402,8 +404,8 @@ describe('WalletService', () => {
     tossPaymentsService.getPayment.mockResolvedValue(
       createTossPayment(order, 'ABORTED'),
     );
-    coinOrderRepository.findOne.mockResolvedValue(order);
-    coinOrderRepository.save.mockImplementation(async (data) => data);
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+    txCoinOrderRepository.save.mockImplementation(async (data) => data);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
@@ -415,22 +417,33 @@ describe('WalletService', () => {
       },
     });
 
-    expect(coinOrderRepository.save).toHaveBeenCalledWith(
+    expect(txCoinOrderRepository.findOne).toHaveBeenCalledWith({
+      where: { orderCode: order.orderCode },
+      lock: { mode: 'pessimistic_write' },
+    });
+    expect(txCoinOrderRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         status: PaymentStatus.FAILED,
         paymentKey: 'payment-key',
       }),
     );
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
   });
 
-  it('DONE 웹훅이면 상태를 유지하고 paymentKey만 반영해야 한다', async () => {
+  it('DONE 웹훅이면 대기중 주문을 완료하고 지갑과 거래내역에 반영해야 한다', async () => {
     const order = createPendingOrder();
+    const wallet = {
+      memberId: order.memberId,
+      balance: 0,
+    };
 
     tossPaymentsService.getPayment.mockResolvedValue(
       createTossPayment(order, 'DONE'),
     );
-    coinOrderRepository.findOne.mockResolvedValue(order);
-    coinOrderRepository.save.mockImplementation(async (data) => data);
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+    txWalletTransactionRepository.findOne.mockResolvedValue(null);
+    txWalletRepository.findOne.mockResolvedValue(wallet);
+    txCoinOrderRepository.save.mockImplementation(async (data) => data);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
@@ -442,21 +455,113 @@ describe('WalletService', () => {
       },
     });
 
-    expect(coinOrderRepository.save).toHaveBeenCalledWith(
+    expect(wallet.balance).toBe(order.coinAmount);
+    expect(txWalletRepository.save).toHaveBeenCalledWith(wallet);
+    expect(txWalletTransactionRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: PaymentStatus.PENDING,
+        memberId: order.memberId,
+        coinAmount: order.coinAmount,
+        cashAmount: order.amount,
+        sourceType: 'COIN_ORDER',
+        sourceId: order.id,
+      }),
+    );
+    expect(txCoinOrderRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PaymentStatus.COMPLETED,
+        paymentKey: 'payment-key',
+      }),
+    );
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+  });
+
+  it('이미 충전 원장이 있는 DONE 웹훅은 지갑을 다시 충전하지 않아야 한다', async () => {
+    const order = createPendingOrder();
+
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'DONE'),
+    );
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+    txWalletTransactionRepository.findOne.mockResolvedValue({
+      id: 100,
+      sourceType: 'COIN_ORDER',
+      sourceId: order.id,
+    });
+    txCoinOrderRepository.save.mockImplementation(async (data) => data);
+
+    await service.handleTossWebhook({
+      eventType: 'PAYMENT_STATUS_CHANGED',
+      data: {
+        orderId: order.orderCode,
+        paymentKey: 'payment-key',
+        status: 'DONE',
+        totalAmount: order.amount,
+      },
+    });
+
+    expect(txWalletRepository.findOne).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
+    expect(txCoinOrderRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PaymentStatus.COMPLETED,
         paymentKey: 'payment-key',
       }),
     );
   });
 
-  it('완료된 주문에는 웹훅이 와도 상태를 바꾸지 않아야 한다', async () => {
+  it('완료된 주문에 CANCELED 웹훅이 오면 지갑을 차감하고 환불 거래내역을 생성해야 한다', async () => {
+    const order = createCompletedOrder();
+    const wallet = {
+      memberId: order.memberId,
+      balance: 20,
+    };
+
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'CANCELED'),
+    );
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+    txWalletTransactionRepository.findOne.mockResolvedValue(null);
+    txWalletRepository.findOne.mockResolvedValue(wallet);
+    txCoinOrderRepository.save.mockImplementation(async (data) => data);
+
+    await service.handleTossWebhook({
+      eventType: 'PAYMENT_STATUS_CHANGED',
+      data: {
+        orderId: order.orderCode,
+        paymentKey: 'payment-key',
+        status: 'CANCELED',
+        totalAmount: order.amount,
+      },
+    });
+
+    expect(wallet.balance).toBe(10);
+    expect(txWalletRepository.save).toHaveBeenCalledWith(wallet);
+    expect(txWalletTransactionRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        memberId: order.memberId,
+        coinAmount: -order.coinAmount,
+        cashAmount: order.amount,
+        sourceType: 'COIN_ORDER',
+        sourceId: order.id,
+      }),
+    );
+    expect(txCoinOrderRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: PaymentStatus.CANCELLED,
+        paymentKey: 'payment-key',
+      }),
+    );
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+  });
+
+  it('완료된 주문에는 실패 웹훅이 와도 상태를 바꾸지 않아야 한다', async () => {
     const order = createCompletedOrder();
 
     tossPaymentsService.getPayment.mockResolvedValue(
       createTossPayment(order, 'ABORTED'),
     );
-    coinOrderRepository.findOne.mockResolvedValue(order);
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
@@ -468,7 +573,33 @@ describe('WalletService', () => {
       },
     });
 
-    expect(coinOrderRepository.save).not.toHaveBeenCalled();
+    expect(txCoinOrderRepository.save).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
+  });
+
+  it('주문에 기록된 paymentKey와 다른 웹훅이면 지갑과 주문을 변경하지 않아야 한다', async () => {
+    const order = createCompletedOrder();
+
+    tossPaymentsService.getPayment.mockResolvedValue(
+      createTossPayment(order, 'CANCELED', 'different-payment-key'),
+    );
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
+
+    await service.handleTossWebhook({
+      eventType: 'PAYMENT_STATUS_CHANGED',
+      data: {
+        orderId: order.orderCode,
+        paymentKey: 'different-payment-key',
+        status: 'CANCELED',
+        totalAmount: order.amount,
+      },
+    });
+
+    expect(txCoinOrderRepository.save).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(txWalletTransactionRepository.save).not.toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
   });
 
   it('토스 조회 금액이 주문 금액과 다르면 무시해야 한다', async () => {
@@ -478,18 +609,21 @@ describe('WalletService', () => {
       ...createTossPayment(order, 'CANCELED'),
       totalAmount: 9999,
     });
-    coinOrderRepository.findOne.mockResolvedValue(order);
+    txCoinOrderRepository.findOne.mockResolvedValue(order);
 
     await service.handleTossWebhook({
       eventType: 'PAYMENT_STATUS_CHANGED',
       data: {
         orderId: 'coin-order-1',
+        paymentKey: 'payment-key',
         status: 'CANCELED',
         totalAmount: 9999,
       },
     });
 
-    expect(coinOrderRepository.save).not.toHaveBeenCalled();
+    expect(txCoinOrderRepository.save).not.toHaveBeenCalled();
+    expect(txWalletRepository.save).not.toHaveBeenCalled();
+    expect(queryRunner.commitTransaction).toHaveBeenCalled();
   });
 
   it('웹훅 본문과 토스 조회 결과의 주문번호가 다르면 무시해야 한다', async () => {
@@ -511,6 +645,7 @@ describe('WalletService', () => {
 
     expect(coinOrderRepository.findOne).not.toHaveBeenCalled();
     expect(coinOrderRepository.save).not.toHaveBeenCalled();
+    expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
   });
 
   it('토스 조회에서 4xx가 나면 웹훅 처리를 무시해야 한다', async () => {
@@ -534,6 +669,7 @@ describe('WalletService', () => {
 
     expect(coinOrderRepository.findOne).not.toHaveBeenCalled();
     expect(coinOrderRepository.save).not.toHaveBeenCalled();
+    expect(dataSource.createQueryRunner).not.toHaveBeenCalled();
   });
 });
 

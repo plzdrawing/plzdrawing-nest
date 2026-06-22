@@ -39,6 +39,8 @@ import {
   type TossPaymentResponse,
 } from './toss-payments.service';
 
+const COIN_ORDER_SOURCE_TYPE = 'COIN_ORDER';
+
 @Injectable()
 export class WalletService {
   constructor(
@@ -333,7 +335,7 @@ export class WalletService {
           cashAmount: order.amount,
           status: WalletTransactionStatus.COMPLETED,
           description: `${order.coinAmount}코인 충전`,
-          sourceType: 'COIN_ORDER',
+          sourceType: COIN_ORDER_SOURCE_TYPE,
           sourceId: order.id,
         }),
       );
@@ -543,7 +545,7 @@ export class WalletService {
           cashAmount: order.amount,
           status: WalletTransactionStatus.COMPLETED,
           description: `${order.coinAmount}코인 결제 취소`,
-          sourceType: 'COIN_ORDER',
+          sourceType: COIN_ORDER_SOURCE_TYPE,
           sourceId: order.id,
         }),
       );
@@ -607,14 +609,107 @@ export class WalletService {
       return;
     }
 
-    const order = await this.coinOrderRepository.findOne({
-      where: { orderCode: orderId },
+    await this.reconcileTossPaymentStatus({
+      orderId,
+      paymentKey,
+      status,
+      totalAmount,
+      approvedAt:
+        typeof tossPayment.approvedAt === 'string'
+          ? tossPayment.approvedAt
+          : null,
     });
-    if (!order) {
-      return;
-    }
+  }
 
-    if (totalAmount !== order.amount) {
+  private async reconcileTossPaymentStatus(payment: {
+    orderId: string;
+    paymentKey: string;
+    status: string;
+    totalAmount: number;
+    approvedAt: string | null;
+  }): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const orderRepository = queryRunner.manager.getRepository(CoinOrder);
+      const walletRepository = queryRunner.manager.getRepository(Wallet);
+      const walletTransactionRepository =
+        queryRunner.manager.getRepository(WalletTransaction);
+
+      const order = await orderRepository.findOne({
+        where: { orderCode: payment.orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!order || payment.totalAmount !== order.amount) {
+        await queryRunner.commitTransaction();
+        return;
+      }
+      if (order.paymentKey && order.paymentKey !== payment.paymentKey) {
+        await queryRunner.commitTransaction();
+        return;
+      }
+
+      if (payment.status === 'DONE') {
+        await this.applyTossWebhookCompletedOrder(
+          order,
+          payment,
+          orderRepository,
+          walletRepository,
+          walletTransactionRepository,
+        );
+        await queryRunner.commitTransaction();
+        return;
+      }
+
+      if (payment.status === 'CANCELED') {
+        await this.applyTossWebhookCancelledOrder(
+          order,
+          payment.paymentKey,
+          orderRepository,
+          walletRepository,
+          walletTransactionRepository,
+        );
+        await queryRunner.commitTransaction();
+        return;
+      }
+
+      if (
+        order.status === PaymentStatus.PENDING &&
+        ['ABORTED', 'EXPIRED'].includes(payment.status)
+      ) {
+        order.status = PaymentStatus.FAILED;
+        order.paymentKey = payment.paymentKey;
+        order.cancelReason = `Toss webhook status: ${payment.status}`;
+        order.cancelledAt = new Date();
+        await orderRepository.save(order);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  private async applyTossWebhookCompletedOrder(
+    order: CoinOrder,
+    payment: {
+      paymentKey: string;
+      approvedAt: string | null;
+    },
+    orderRepository: Repository<CoinOrder>,
+    walletRepository: Repository<Wallet>,
+    walletTransactionRepository: Repository<WalletTransaction>,
+  ): Promise<void> {
+    if (order.status === PaymentStatus.COMPLETED) {
+      if (order.paymentKey !== payment.paymentKey) {
+        order.paymentKey = payment.paymentKey;
+        await orderRepository.save(order);
+      }
       return;
     }
 
@@ -622,30 +717,114 @@ export class WalletService {
       return;
     }
 
-    if (status === 'DONE') {
-      if (paymentKey && order.paymentKey !== paymentKey) {
-        order.paymentKey = paymentKey;
-        await this.coinOrderRepository.save(order);
+    const existingCharge = await walletTransactionRepository.findOne({
+      where: {
+        memberId: order.memberId,
+        type: WalletTransactionType.CHARGE,
+        sourceType: COIN_ORDER_SOURCE_TYPE,
+        sourceId: order.id,
+      },
+    });
+
+    if (!existingCharge) {
+      let wallet = await walletRepository.findOne({
+        where: { memberId: order.memberId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!wallet) {
+        wallet = walletRepository.create({
+          memberId: order.memberId,
+          balance: 0,
+        });
       }
+
+      wallet.balance += order.coinAmount;
+      await walletRepository.save(wallet);
+
+      await walletTransactionRepository.save(
+        walletTransactionRepository.create({
+          memberId: order.memberId,
+          type: WalletTransactionType.CHARGE,
+          coinAmount: order.coinAmount,
+          cashAmount: order.amount,
+          status: WalletTransactionStatus.COMPLETED,
+          description: `${order.coinAmount}코인 충전`,
+          sourceType: COIN_ORDER_SOURCE_TYPE,
+          sourceId: order.id,
+        }),
+      );
+    }
+
+    order.status = PaymentStatus.COMPLETED;
+    order.paymentKey = payment.paymentKey;
+    order.approvedAt = payment.approvedAt
+      ? new Date(payment.approvedAt)
+      : new Date();
+    await orderRepository.save(order);
+  }
+
+  private async applyTossWebhookCancelledOrder(
+    order: CoinOrder,
+    paymentKey: string,
+    orderRepository: Repository<CoinOrder>,
+    walletRepository: Repository<Wallet>,
+    walletTransactionRepository: Repository<WalletTransaction>,
+  ): Promise<void> {
+    if (order.status === PaymentStatus.CANCELLED) {
       return;
     }
 
-    if (status === 'CANCELED') {
-      order.status = PaymentStatus.CANCELLED;
-      order.paymentKey = paymentKey ?? order.paymentKey;
-      order.cancelReason = `Toss webhook status: ${status}`;
-      order.cancelledAt = new Date();
-      await this.coinOrderRepository.save(order);
+    if (order.status === PaymentStatus.COMPLETED) {
+      const existingRefund = await walletTransactionRepository.findOne({
+        where: {
+          memberId: order.memberId,
+          type: WalletTransactionType.REFUND,
+          sourceType: COIN_ORDER_SOURCE_TYPE,
+          sourceId: order.id,
+        },
+      });
+
+      if (!existingRefund) {
+        const wallet = await walletRepository.findOne({
+          where: { memberId: order.memberId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!wallet) {
+          throw new NotFoundException('Wallet not found');
+        }
+        if (wallet.balance < order.coinAmount) {
+          throw new BadRequestException(
+            'Not enough coin balance to reconcile cancelled Toss payment',
+          );
+        }
+
+        wallet.balance -= order.coinAmount;
+        await walletRepository.save(wallet);
+
+        await walletTransactionRepository.save(
+          walletTransactionRepository.create({
+            memberId: order.memberId,
+            type: WalletTransactionType.REFUND,
+            coinAmount: -order.coinAmount,
+            cashAmount: order.amount,
+            status: WalletTransactionStatus.COMPLETED,
+            description: `${order.coinAmount}코인 결제 취소`,
+            sourceType: COIN_ORDER_SOURCE_TYPE,
+            sourceId: order.id,
+          }),
+        );
+      }
+    } else if (
+      ![PaymentStatus.PENDING, PaymentStatus.FAILED].includes(order.status)
+    ) {
       return;
     }
 
-    if (['ABORTED', 'EXPIRED'].includes(status)) {
-      order.status = PaymentStatus.FAILED;
-      order.paymentKey = paymentKey ?? order.paymentKey;
-      order.cancelReason = `Toss webhook status: ${status}`;
-      order.cancelledAt = new Date();
-      await this.coinOrderRepository.save(order);
-    }
+    order.status = PaymentStatus.CANCELLED;
+    order.paymentKey = paymentKey;
+    order.cancelReason = 'Toss webhook status: CANCELED';
+    order.cancelledAt = new Date();
+    await orderRepository.save(order);
   }
 
   private async getOrCreateWallet(memberId: number): Promise<Wallet> {
