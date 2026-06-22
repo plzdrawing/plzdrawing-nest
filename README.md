@@ -18,6 +18,7 @@ NestJS 기반 `plzdrawing` 백엔드입니다.
 - [프로젝트 구조](docs/architecture.md)
 - [채팅 WebSocket](docs/websocket.md)
 - [결제/지갑 거래원장](docs/payment-ledger.md)
+- [테스트 가이드](docs/testing.md)
 - [운영/배포 체크리스트](docs/operations.md)
 
 ## 실행
