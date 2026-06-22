@@ -1,6 +1,7 @@
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -12,6 +13,11 @@ import {
 import { BaseEntity } from '../common/entities/base.entity';
 import { Member } from './member.entity';
 
+@Index(
+  'IDX_wallet_transaction_source_dedup',
+  ['memberId', 'type', 'sourceType', 'sourceId'],
+  { unique: true },
+)
 @Entity('wallet_transaction')
 export class WalletTransaction extends BaseEntity {
   @PrimaryGeneratedColumn()
