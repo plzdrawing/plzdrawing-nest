@@ -35,6 +35,7 @@ import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
 import { WalletBalanceMismatchPageResponseDto } from './dto/wallet-balance-mismatch-response.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
+import { WalletTransactionSourceDuplicatePageResponseDto } from './dto/wallet-transaction-source-duplicate-response.dto';
 
 @ApiTags('Wallet')
 @Controller()
@@ -90,6 +91,29 @@ export class WalletController {
     @Query() paginationDto: PaginationDto,
   ): Promise<WalletBalanceMismatchPageResponseDto> {
     return this.walletService.getWalletBalanceMismatchesForAdmin(
+      member,
+      paginationDto,
+    );
+  }
+
+  @Get('wallet/v1/admin/audit/duplicate-transaction-sources')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '거래원장 원천 중복 점검 (관리자)',
+    description:
+      'member/type/sourceType/sourceId 조합이 중복된 지갑 거래내역 묶음을 조회합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '거래원장 원천 중복 목록 조회 성공',
+    type: WalletTransactionSourceDuplicatePageResponseDto,
+  })
+  async getWalletTransactionSourceDuplicatesForAdmin(
+    @GetUser() member: Member,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<WalletTransactionSourceDuplicatePageResponseDto> {
+    return this.walletService.getWalletTransactionSourceDuplicatesForAdmin(
       member,
       paginationDto,
     );

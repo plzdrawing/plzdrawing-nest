@@ -39,6 +39,10 @@ import {
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
 import { WalletTransactionResponseDto } from './dto/wallet-transaction-response.dto';
 import {
+  WalletTransactionSourceDuplicatePageResponseDto,
+  WalletTransactionSourceDuplicateResponseDto,
+} from './dto/wallet-transaction-source-duplicate-response.dto';
+import {
   TossPaymentsService,
   type TossPaymentResponse,
 } from './toss-payments.service';
@@ -52,6 +56,19 @@ type WalletBalanceMismatchRaw = {
   walletBalance: string | number;
   transactionBalance: string | number | null;
   difference: string | number;
+};
+
+type WalletTransactionSourceDuplicateRaw = {
+  memberId: string | number;
+  memberEmail: string | null;
+  memberNickname: string | null;
+  type: WalletTransactionType;
+  sourceType: string;
+  sourceId: string | number;
+  transactionCount: string | number;
+  coinAmountSum: string | number | null;
+  firstCreatedAt: string | Date | null;
+  lastCreatedAt: string | Date | null;
 };
 
 @Injectable()
@@ -128,6 +145,28 @@ export class WalletService {
 
     return {
       data: rows.map((row) => this.mapWalletBalanceMismatch(row)),
+      total: totalRows.length,
+      page,
+      limit,
+    };
+  }
+
+  async getWalletTransactionSourceDuplicatesForAdmin(
+    member: Member,
+    paginationDto: PaginationDto,
+  ): Promise<WalletTransactionSourceDuplicatePageResponseDto> {
+    this.assertAdmin(member);
+
+    const { page = 1, limit = 10 } = paginationDto;
+    const totalRows =
+      await this.createWalletTransactionSourceDuplicateQuery().getRawMany();
+    const rows = await this.createWalletTransactionSourceDuplicateQuery()
+      .offset((page - 1) * limit)
+      .limit(limit)
+      .getRawMany<WalletTransactionSourceDuplicateRaw>();
+
+    return {
+      data: rows.map((row) => this.mapWalletTransactionSourceDuplicate(row)),
       total: totalRows.length,
       page,
       limit,
@@ -975,6 +1014,36 @@ export class WalletService {
       .addOrderBy('wallet.member_id', 'ASC');
   }
 
+  private createWalletTransactionSourceDuplicateQuery() {
+    return this.walletTransactionRepository
+      .createQueryBuilder('walletTransaction')
+      .leftJoin(Member, 'member', 'member.id = walletTransaction.member_id')
+      .select('walletTransaction.member_id', 'memberId')
+      .addSelect('member.email', 'memberEmail')
+      .addSelect('member.nickname', 'memberNickname')
+      .addSelect('walletTransaction.type', 'type')
+      .addSelect('walletTransaction.source_type', 'sourceType')
+      .addSelect('walletTransaction.source_id', 'sourceId')
+      .addSelect('COUNT(walletTransaction.id)', 'transactionCount')
+      .addSelect(
+        'COALESCE(SUM(walletTransaction.coin_amount), 0)',
+        'coinAmountSum',
+      )
+      .addSelect('MIN(walletTransaction.created_at)', 'firstCreatedAt')
+      .addSelect('MAX(walletTransaction.created_at)', 'lastCreatedAt')
+      .where('walletTransaction.source_type IS NOT NULL')
+      .andWhere('walletTransaction.source_id IS NOT NULL')
+      .groupBy('walletTransaction.member_id')
+      .addGroupBy('member.email')
+      .addGroupBy('member.nickname')
+      .addGroupBy('walletTransaction.type')
+      .addGroupBy('walletTransaction.source_type')
+      .addGroupBy('walletTransaction.source_id')
+      .having('COUNT(walletTransaction.id) > 1')
+      .orderBy('COUNT(walletTransaction.id)', 'DESC')
+      .addOrderBy('walletTransaction.member_id', 'ASC');
+  }
+
   private mapWalletBalanceMismatch(
     raw: WalletBalanceMismatchRaw,
   ): WalletBalanceMismatchResponseDto {
@@ -988,6 +1057,23 @@ export class WalletService {
     );
   }
 
+  private mapWalletTransactionSourceDuplicate(
+    raw: WalletTransactionSourceDuplicateRaw,
+  ): WalletTransactionSourceDuplicateResponseDto {
+    return new WalletTransactionSourceDuplicateResponseDto(
+      this.toNumber(raw.memberId),
+      raw.memberEmail ?? null,
+      raw.memberNickname ?? null,
+      raw.type,
+      raw.sourceType,
+      this.toNumber(raw.sourceId),
+      this.toNumber(raw.transactionCount),
+      this.toNumber(raw.coinAmountSum),
+      this.toDate(raw.firstCreatedAt),
+      this.toDate(raw.lastCreatedAt),
+    );
+  }
+
   private toNumber(value: string | number | null): number {
     if (value === null) {
       return 0;
@@ -995,6 +1081,14 @@ export class WalletService {
 
     const parsed = Number(value);
     return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  private toDate(value: string | Date | null): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    return value instanceof Date ? value : new Date(value);
   }
 
   private generateOrderCode(): string {

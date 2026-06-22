@@ -5,6 +5,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   WalletTransactionStatus,
+  WalletTransactionType,
 } from '../common/enums';
 import { CoinProduct } from '../entities/coin-product.entity';
 import { CoinOrder } from '../entities/coin-order.entity';
@@ -32,6 +33,7 @@ describe('WalletService', () => {
     create: jest.fn((data) => data),
     findOne: jest.fn(),
     save: jest.fn(),
+    createQueryBuilder: jest.fn(),
   };
 
   const coinProductRepository = {
@@ -306,6 +308,86 @@ describe('WalletService', () => {
           walletBalance: 20,
           transactionBalance: 30,
           difference: -10,
+        }),
+      ],
+      total: 2,
+      page: 2,
+      limit: 1,
+    });
+  });
+
+  it('관리자가 아니면 거래원장 원천 중복 점검을 조회할 수 없어야 한다', async () => {
+    await expect(
+      service.getWalletTransactionSourceDuplicatesForAdmin(
+        { role: MemberRole.ROLE_MEMBER } as Member,
+        { page: 1, limit: 10 },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(
+      walletTransactionRepository.createQueryBuilder,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('관리자는 동일 원천의 중복 거래내역 묶음을 조회할 수 있어야 한다', async () => {
+    const allRows = [
+      createWalletTransactionSourceDuplicateRaw({
+        memberId: '10',
+        type: WalletTransactionType.CHARGE,
+        sourceType: 'COIN_ORDER',
+        sourceId: '1',
+        transactionCount: '3',
+        coinAmountSum: '30',
+      }),
+      createWalletTransactionSourceDuplicateRaw({
+        memberId: '11',
+        type: WalletTransactionType.REFUND,
+        sourceType: 'COIN_ORDER',
+        sourceId: '2',
+        transactionCount: '2',
+        coinAmountSum: '-20',
+      }),
+    ];
+    const countQueryBuilder =
+      createWalletTransactionSourceDuplicateQueryBuilderMock(allRows);
+    const pageQueryBuilder =
+      createWalletTransactionSourceDuplicateQueryBuilderMock([allRows[1]]);
+    walletTransactionRepository.createQueryBuilder
+      .mockReturnValueOnce(countQueryBuilder)
+      .mockReturnValueOnce(pageQueryBuilder);
+
+    const result = await service.getWalletTransactionSourceDuplicatesForAdmin(
+      { role: MemberRole.ROLE_ADMIN } as Member,
+      { page: 2, limit: 1 },
+    );
+
+    expect(walletTransactionRepository.createQueryBuilder).toHaveBeenCalledWith(
+      'walletTransaction',
+    );
+    expect(pageQueryBuilder.where).toHaveBeenCalledWith(
+      'walletTransaction.source_type IS NOT NULL',
+    );
+    expect(pageQueryBuilder.andWhere).toHaveBeenCalledWith(
+      'walletTransaction.source_id IS NOT NULL',
+    );
+    expect(pageQueryBuilder.having).toHaveBeenCalledWith(
+      'COUNT(walletTransaction.id) > 1',
+    );
+    expect(pageQueryBuilder.offset).toHaveBeenCalledWith(1);
+    expect(pageQueryBuilder.limit).toHaveBeenCalledWith(1);
+    expect(result).toEqual({
+      data: [
+        expect.objectContaining({
+          memberId: 11,
+          memberEmail: 'user11@example.com',
+          memberNickname: '회원11',
+          type: WalletTransactionType.REFUND,
+          sourceType: 'COIN_ORDER',
+          sourceId: 2,
+          transactionCount: 2,
+          coinAmountSum: -20,
+          firstCreatedAt: new Date('2026-06-22T09:00:00.000Z'),
+          lastCreatedAt: new Date('2026-06-22T09:05:00.000Z'),
         }),
       ],
       total: 2,
@@ -833,6 +915,46 @@ function createWalletBalanceMismatchQueryBuilderMock(result: any[]) {
     leftJoin: jest.fn().mockReturnThis(),
     select: jest.fn().mockReturnThis(),
     addSelect: jest.fn().mockReturnThis(),
+    groupBy: jest.fn().mockReturnThis(),
+    addGroupBy: jest.fn().mockReturnThis(),
+    having: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    offset: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    getRawMany: jest.fn().mockResolvedValue(result),
+  };
+}
+
+function createWalletTransactionSourceDuplicateRaw(overrides: {
+  memberId: string;
+  type: WalletTransactionType;
+  sourceType: string;
+  sourceId: string;
+  transactionCount: string;
+  coinAmountSum: string;
+}) {
+  return {
+    memberId: overrides.memberId,
+    memberEmail: `user${overrides.memberId}@example.com`,
+    memberNickname: `회원${overrides.memberId}`,
+    type: overrides.type,
+    sourceType: overrides.sourceType,
+    sourceId: overrides.sourceId,
+    transactionCount: overrides.transactionCount,
+    coinAmountSum: overrides.coinAmountSum,
+    firstCreatedAt: '2026-06-22T09:00:00.000Z',
+    lastCreatedAt: '2026-06-22T09:05:00.000Z',
+  };
+}
+
+function createWalletTransactionSourceDuplicateQueryBuilderMock(result: any[]) {
+  return {
+    leftJoin: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    addSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
     groupBy: jest.fn().mockReturnThis(),
     addGroupBy: jest.fn().mockReturnThis(),
     having: jest.fn().mockReturnThis(),
