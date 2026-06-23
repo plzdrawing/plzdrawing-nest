@@ -4,6 +4,17 @@ import * as admin from 'firebase-admin';
 import * as fs from 'fs';
 import * as path from 'path';
 
+const FIREBASE_DISABLED_MESSAGE_ID = 'firebase-disabled';
+
+export function isFirebaseEnabled(configService: ConfigService): boolean {
+  const value = configService.get<string>('FIREBASE_ENABLED')?.trim();
+  if (!value) {
+    return true;
+  }
+
+  return !['false', '0', 'no', 'off'].includes(value.toLowerCase());
+}
+
 function parseServiceAccount(
   rawValue: string,
   source: string,
@@ -52,6 +63,14 @@ export function loadFirebaseServiceAccount(
   return parseServiceAccount(rawServiceAccount, absolutePath);
 }
 
+function createDisabledFirebaseApp(): admin.app.App {
+  return {
+    messaging: () => ({
+      send: async () => FIREBASE_DISABLED_MESSAGE_ID,
+    }),
+  } as unknown as admin.app.App;
+}
+
 @Global()
 @Module({
   imports: [ConfigModule],
@@ -59,6 +78,10 @@ export function loadFirebaseServiceAccount(
     {
       provide: 'FIREBASE_ADMIN',
       useFactory: (configService: ConfigService) => {
+        if (!isFirebaseEnabled(configService)) {
+          return createDisabledFirebaseApp();
+        }
+
         const serviceAccount = loadFirebaseServiceAccount(configService);
 
         return admin.initializeApp({

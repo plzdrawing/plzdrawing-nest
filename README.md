@@ -124,11 +124,13 @@ pnpm test:cov
 
 ### Firebase
 
+- `FIREBASE_ENABLED`: Firebase Admin 사용 여부, 로컬에서 push 알림이 필요 없으면 `false`
 - `FIREBASE_CONFIG_PATH`: 로컬 또는 secret mount로 주입한 JSON 파일 경로
 - `FIREBASE_SERVICE_ACCOUNT_BASE64`: 런타임에 주입한 service account JSON의 base64 값
 
 참고:
 
+- `FIREBASE_ENABLED=false`이면 credential 없이 부팅하고 push 발송은 no-op으로 처리합니다.
 - 두 값 중 하나가 필요하며, 둘 다 있으면 `FIREBASE_SERVICE_ACCOUNT_BASE64`를 우선 사용합니다.
 - `firebase-service-account.json` 같은 실제 credential 파일은 저장소나 Docker 이미지에 포함하지 않습니다.
 

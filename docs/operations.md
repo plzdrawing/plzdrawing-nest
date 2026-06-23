@@ -71,10 +71,12 @@ production에서는 Kakao 관련 필수값이 없으면 부팅 단계에서 실�
 
 - Mail: `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`
 - AWS S3: `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `BUCKET_REGION`, `BUCKET_NAME`
-- Firebase: `FIREBASE_SERVICE_ACCOUNT_BASE64` 또는 `FIREBASE_CONFIG_PATH`
+- Firebase: `FIREBASE_ENABLED`, `FIREBASE_SERVICE_ACCOUNT_BASE64` 또는 `FIREBASE_CONFIG_PATH`
 - Toss: `TOSS_PAYMENTS_SECRET_KEY`, `TOSS_PAYMENTS_API_BASE_URL`
 
 credential 파일은 저장소와 Docker 이미지에 포함하지 않는다. 가능하면 base64 secret, secret manager, secret mount 중 하나로 런타임에 주입한다.
+
+로컬에서 채팅처럼 push 알림과 무관한 기능만 테스트한다면 `FIREBASE_ENABLED=false`로 credential 없이 부팅할 수 있다. 운영에서는 `FIREBASE_ENABLED=true`와 실제 credential 주입을 기준으로 한다.
 
 ### 환전/앱 정보/시드
 
