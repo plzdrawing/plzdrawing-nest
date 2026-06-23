@@ -401,17 +401,10 @@ export class WalletService {
         : new Date();
       const savedOrder = await orderRepository.save(order);
 
-      await walletTransactionRepository.save(
-        walletTransactionRepository.create({
-          memberId,
-          type: WalletTransactionType.CHARGE,
-          coinAmount: order.coinAmount,
-          cashAmount: order.amount,
-          status: WalletTransactionStatus.COMPLETED,
-          description: `${order.coinAmount}코인 충전`,
-          sourceType: COIN_ORDER_SOURCE_TYPE,
-          sourceId: order.id,
-        }),
+      await this.saveCoinOrderWalletTransaction(
+        walletTransactionRepository,
+        order,
+        WalletTransactionType.CHARGE,
       );
 
       await queryRunner.commitTransaction();
@@ -611,17 +604,10 @@ export class WalletService {
       order.cancelledAt = new Date();
       const savedOrder = await orderRepository.save(order);
 
-      await walletTransactionRepository.save(
-        walletTransactionRepository.create({
-          memberId,
-          type: WalletTransactionType.REFUND,
-          coinAmount: -order.coinAmount,
-          cashAmount: order.amount,
-          status: WalletTransactionStatus.COMPLETED,
-          description: `${order.coinAmount}코인 결제 취소`,
-          sourceType: COIN_ORDER_SOURCE_TYPE,
-          sourceId: order.id,
-        }),
+      await this.saveCoinOrderWalletTransaction(
+        walletTransactionRepository,
+        order,
+        WalletTransactionType.REFUND,
       );
 
       await queryRunner.commitTransaction();
@@ -791,16 +777,13 @@ export class WalletService {
       return;
     }
 
-    const existingCharge = await walletTransactionRepository.findOne({
-      where: {
-        memberId: order.memberId,
-        type: WalletTransactionType.CHARGE,
-        sourceType: COIN_ORDER_SOURCE_TYPE,
-        sourceId: order.id,
-      },
-    });
+    const hasCharge = await this.hasCoinOrderWalletTransaction(
+      walletTransactionRepository,
+      order,
+      WalletTransactionType.CHARGE,
+    );
 
-    if (!existingCharge) {
+    if (!hasCharge) {
       let wallet = await walletRepository.findOne({
         where: { memberId: order.memberId },
         lock: { mode: 'pessimistic_write' },
@@ -815,17 +798,10 @@ export class WalletService {
       wallet.balance += order.coinAmount;
       await walletRepository.save(wallet);
 
-      await walletTransactionRepository.save(
-        walletTransactionRepository.create({
-          memberId: order.memberId,
-          type: WalletTransactionType.CHARGE,
-          coinAmount: order.coinAmount,
-          cashAmount: order.amount,
-          status: WalletTransactionStatus.COMPLETED,
-          description: `${order.coinAmount}코인 충전`,
-          sourceType: COIN_ORDER_SOURCE_TYPE,
-          sourceId: order.id,
-        }),
+      await this.saveCoinOrderWalletTransaction(
+        walletTransactionRepository,
+        order,
+        WalletTransactionType.CHARGE,
       );
     }
 
@@ -849,16 +825,13 @@ export class WalletService {
     }
 
     if (order.status === PaymentStatus.COMPLETED) {
-      const existingRefund = await walletTransactionRepository.findOne({
-        where: {
-          memberId: order.memberId,
-          type: WalletTransactionType.REFUND,
-          sourceType: COIN_ORDER_SOURCE_TYPE,
-          sourceId: order.id,
-        },
-      });
+      const hasRefund = await this.hasCoinOrderWalletTransaction(
+        walletTransactionRepository,
+        order,
+        WalletTransactionType.REFUND,
+      );
 
-      if (!existingRefund) {
+      if (!hasRefund) {
         const wallet = await walletRepository.findOne({
           where: { memberId: order.memberId },
           lock: { mode: 'pessimistic_write' },
@@ -875,17 +848,10 @@ export class WalletService {
         wallet.balance -= order.coinAmount;
         await walletRepository.save(wallet);
 
-        await walletTransactionRepository.save(
-          walletTransactionRepository.create({
-            memberId: order.memberId,
-            type: WalletTransactionType.REFUND,
-            coinAmount: -order.coinAmount,
-            cashAmount: order.amount,
-            status: WalletTransactionStatus.COMPLETED,
-            description: `${order.coinAmount}코인 결제 취소`,
-            sourceType: COIN_ORDER_SOURCE_TYPE,
-            sourceId: order.id,
-          }),
+        await this.saveCoinOrderWalletTransaction(
+          walletTransactionRepository,
+          order,
+          WalletTransactionType.REFUND,
         );
       }
     } else if (
@@ -899,6 +865,60 @@ export class WalletService {
     order.cancelReason = 'Toss webhook status: CANCELED';
     order.cancelledAt = new Date();
     await orderRepository.save(order);
+  }
+
+  private async hasCoinOrderWalletTransaction(
+    walletTransactionRepository: Repository<WalletTransaction>,
+    order: CoinOrder,
+    type: WalletTransactionType.CHARGE | WalletTransactionType.REFUND,
+  ): Promise<boolean> {
+    const transaction = await walletTransactionRepository.findOne({
+      where: {
+        memberId: order.memberId,
+        type,
+        sourceType: COIN_ORDER_SOURCE_TYPE,
+        sourceId: order.id,
+      },
+    });
+
+    return Boolean(transaction);
+  }
+
+  private async saveCoinOrderWalletTransaction(
+    walletTransactionRepository: Repository<WalletTransaction>,
+    order: CoinOrder,
+    type: WalletTransactionType.CHARGE | WalletTransactionType.REFUND,
+  ): Promise<void> {
+    await walletTransactionRepository.save(
+      walletTransactionRepository.create({
+        memberId: order.memberId,
+        type,
+        coinAmount: this.getCoinOrderWalletTransactionCoinAmount(order, type),
+        cashAmount: order.amount,
+        status: WalletTransactionStatus.COMPLETED,
+        description: this.getCoinOrderWalletTransactionDescription(order, type),
+        sourceType: COIN_ORDER_SOURCE_TYPE,
+        sourceId: order.id,
+      }),
+    );
+  }
+
+  private getCoinOrderWalletTransactionCoinAmount(
+    order: CoinOrder,
+    type: WalletTransactionType.CHARGE | WalletTransactionType.REFUND,
+  ): number {
+    return type === WalletTransactionType.CHARGE
+      ? order.coinAmount
+      : -order.coinAmount;
+  }
+
+  private getCoinOrderWalletTransactionDescription(
+    order: CoinOrder,
+    type: WalletTransactionType.CHARGE | WalletTransactionType.REFUND,
+  ): string {
+    return type === WalletTransactionType.CHARGE
+      ? `${order.coinAmount}코인 충전`
+      : `${order.coinAmount}코인 결제 취소`;
   }
 
   private async getOrCreateWallet(memberId: number): Promise<Wallet> {
