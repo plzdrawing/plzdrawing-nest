@@ -247,7 +247,9 @@
       <h1>Chat Image Test Lab</h1>
       <p class="note">
         Same-origin page for end-to-end test: login/register, create chat room,
-        send image, and verify the other user can load it.
+        send image, and verify the other user can load it. Open this page from
+        <code>/chat-test</code> on the backend server; direct
+        <code>file://</code> access cannot perform browser-to-S3 uploads.
       </p>
 
       <div class="card">
@@ -372,10 +374,12 @@
             <option value="A">User A</option>
             <option value="B">User B</option>
           </select>
-          <button onclick="sendImageMessage()">Send Image</button>
+          <button id="sendImageButton" onclick="sendImageMessage()">
+            Send Image
+          </button>
           <div class="note">
-            Uses <code>POST /api/chats/{id}/messages/image</code> with multipart
-            field name <code>image</code>.
+            Issues a presigned URL, uploads the raw file to S3 with
+            <code>PUT</code>, then stores the image message.
           </div>
         </div>
       </div>
@@ -796,7 +800,19 @@
       }
 
       async function sendImageMessage() {
+        const sendButton = document.getElementById('sendImageButton');
+        let stage = 'validation';
+
         try {
+          if (window.location.protocol === 'file:') {
+            log('Send image failed', {
+              error: 'Open the test page through the backend server',
+              url: `${state.baseUrl}/chat-test`,
+              reason: 'S3 CORS does not accept the file:// origin',
+            });
+            return;
+          }
+
           const chatRoomId = Number(
             document.getElementById('imageChatRoomId').value,
           );
@@ -813,20 +829,109 @@
             return;
           }
 
-          const form = new FormData();
-          form.append('image', file);
+          const allowedContentTypes = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allowedContentTypes.includes(file.type)) {
+            log('Send image failed', {
+              error: 'Only JPEG, PNG, and WebP images are supported',
+              contentType: file.type || '(empty)',
+            });
+            return;
+          }
+          if (file.size > 10 * 1024 * 1024) {
+            log('Send image failed', {
+              error: 'Image must be 10MB or smaller',
+              size: file.size,
+            });
+            return;
+          }
 
+          sendButton.disabled = true;
+          const dimensions = await getImageDimensions(file);
+
+          stage = 'presigned URL request';
+          const upload = await apiFetch(
+            `/chats/${chatRoomId}/messages/image-upload`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: file.name,
+                contentType: file.type,
+                size: file.size,
+                ...dimensions,
+              }),
+            },
+            userKey,
+          );
+          log('Image upload URL issued', {
+            objectKey: upload.objectKey,
+            expiresAt: upload.expiresAt,
+          });
+
+          stage = 'S3 PUT upload';
+          const s3Response = await fetch(upload.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file,
+          });
+          if (!s3Response.ok) {
+            const responseBody = await s3Response.text();
+            throw {
+              status: s3Response.status,
+              data: responseBody || s3Response.statusText,
+            };
+          }
+          log('S3 image upload completed', {
+            status: s3Response.status,
+            objectKey: upload.objectKey,
+            etag: s3Response.headers.get('etag'),
+          });
+
+          stage = 'image message creation';
           const result = await apiFetch(
-            `/chats/${chatRoomId}/messages/image`,
-            { method: 'POST', body: form },
+            `/chats/${chatRoomId}/messages`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'IMAGE',
+                objectKey: upload.objectKey,
+                size: file.size,
+                mimeType: file.type,
+                ...dimensions,
+              }),
+            },
             userKey,
           );
           log('Image message sent', result);
           fileInput.value = '';
           await refreshBothViewers();
         } catch (error) {
-          log('Send image failed', error);
+          log(`Send image failed (${stage})`, {
+            message: error?.message,
+            status: error?.status,
+            data: error?.data,
+          });
+        } finally {
+          sendButton.disabled = false;
         }
+      }
+
+      function getImageDimensions(file) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          const objectUrl = URL.createObjectURL(file);
+
+          image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve({ width: image.naturalWidth, height: image.naturalHeight });
+          };
+          image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Failed to read image dimensions'));
+          };
+          image.src = objectUrl;
+        });
       }
 
       function renderMessages(userKey, messages) {
@@ -1129,6 +1234,13 @@
           '<div class="note">Login and refresh to load messages.</div>';
         setSocketStatus('A', 'disconnected');
         setSocketStatus('B', 'disconnected');
+
+        if (window.location.protocol === 'file:') {
+          log('Direct file access detected', {
+            open: `${state.baseUrl}/chat-test`,
+            reason: 'S3 uploads require an HTTP origin allowed by bucket CORS',
+          });
+        }
       }
 
       initPage();
