@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -14,12 +14,13 @@ import { MAX_CHAT_IMAGE_SIZE_BYTES } from '../chat.constants';
 
 export class SendMessageDto {
   @ApiPropertyOptional({
-    description: '메시지 타입 (기본값 TEXT)',
-    enum: MessageType,
+    description:
+      '메시지 타입 (기본값 TEXT). 클라이언트는 TEXT 또는 IMAGE만 전송할 수 있습니다.',
+    enum: [MessageType.TEXT, MessageType.IMAGE],
     example: MessageType.TEXT,
   })
   @IsOptional()
-  @IsEnum(MessageType)
+  @IsIn([MessageType.TEXT, MessageType.IMAGE])
   type?: MessageType;
 
   @ApiPropertyOptional({

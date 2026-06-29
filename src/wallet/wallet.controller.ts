@@ -32,8 +32,10 @@ import { CreateCoinProductDto } from './dto/create-coin-product.dto';
 import { CreateCoinOrderDto } from './dto/create-coin-order.dto';
 import { TossWebhookDto } from './dto/toss-webhook.dto';
 import { UpdateCoinProductDto } from './dto/update-coin-product.dto';
+import { WalletBalanceMismatchPageResponseDto } from './dto/wallet-balance-mismatch-response.dto';
 import { WalletSummaryResponseDto } from './dto/wallet-summary-response.dto';
 import { WalletTransactionPageResponseDto } from './dto/wallet-transaction-page-response.dto';
+import { WalletTransactionSourceDuplicatePageResponseDto } from './dto/wallet-transaction-source-duplicate-response.dto';
 
 @ApiTags('Wallet')
 @Controller()
@@ -69,6 +71,52 @@ export class WalletController {
     @Query() paginationDto: PaginationDto,
   ): Promise<WalletTransactionPageResponseDto> {
     return this.walletService.getMyTransactions(member.id, paginationDto);
+  }
+
+  @Get('wallet/v1/admin/audit/balance-mismatches')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '지갑 잔액/거래원장 불일치 점검 (관리자)',
+    description:
+      'wallet.balance와 완료된 지갑 거래내역 coinAmount 합계가 다른 회원 목록을 조회합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '지갑 잔액/거래원장 불일치 목록 조회 성공',
+    type: WalletBalanceMismatchPageResponseDto,
+  })
+  async getWalletBalanceMismatchesForAdmin(
+    @GetUser() member: Member,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<WalletBalanceMismatchPageResponseDto> {
+    return this.walletService.getWalletBalanceMismatchesForAdmin(
+      member,
+      paginationDto,
+    );
+  }
+
+  @Get('wallet/v1/admin/audit/duplicate-transaction-sources')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: '거래원장 원천 중복 점검 (관리자)',
+    description:
+      'member/type/sourceType/sourceId 조합이 중복된 지갑 거래내역 묶음을 조회합니다.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '거래원장 원천 중복 목록 조회 성공',
+    type: WalletTransactionSourceDuplicatePageResponseDto,
+  })
+  async getWalletTransactionSourceDuplicatesForAdmin(
+    @GetUser() member: Member,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<WalletTransactionSourceDuplicatePageResponseDto> {
+    return this.walletService.getWalletTransactionSourceDuplicatesForAdmin(
+      member,
+      paginationDto,
+    );
   }
 
   @Get('coin-shop/v1/products')

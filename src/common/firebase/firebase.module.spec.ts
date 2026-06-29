@@ -1,5 +1,28 @@
 import { ConfigService } from '@nestjs/config';
-import { loadFirebaseServiceAccount } from './firebase.module';
+import {
+  isFirebaseEnabled,
+  loadFirebaseServiceAccount,
+} from './firebase.module';
+
+describe('isFirebaseEnabled', () => {
+  it('FIREBASE_ENABLED 설정이 없으면 활성화로 판단한다', () => {
+    const configService = {
+      get: jest.fn(() => undefined),
+    } as unknown as ConfigService;
+
+    expect(isFirebaseEnabled(configService)).toBe(true);
+  });
+
+  it('FIREBASE_ENABLED=false면 비활성화로 판단한다', () => {
+    const configService = {
+      get: jest.fn((key: string) =>
+        key === 'FIREBASE_ENABLED' ? 'false' : undefined,
+      ),
+    } as unknown as ConfigService;
+
+    expect(isFirebaseEnabled(configService)).toBe(false);
+  });
+});
 
 describe('loadFirebaseServiceAccount', () => {
   const serviceAccount = {

@@ -8,6 +8,10 @@ import { Post } from '../entities/post.entity';
 import { PaymentHistory } from '../entities/payment-history.entity';
 import { Wallet } from '../entities/wallet.entity';
 import { WalletTransaction } from '../entities/wallet-transaction.entity';
+import { AuthModule } from '../auth/auth.module';
+import { MemberModule } from '../member/member.module';
+import { ChatGateway } from './chat.gateway';
+import { ChatRealtimeService } from './chat-realtime.service';
 
 @Module({
   imports: [
@@ -19,8 +23,11 @@ import { WalletTransaction } from '../entities/wallet-transaction.entity';
       Wallet,
       WalletTransaction,
     ]),
+    AuthModule,
+    MemberModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService],
+  providers: [ChatService, ChatGateway, ChatRealtimeService],
+  exports: [ChatRealtimeService],
 })
 export class ChatModule {}

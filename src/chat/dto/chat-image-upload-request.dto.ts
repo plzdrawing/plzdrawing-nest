@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { MAX_CHAT_IMAGE_SIZE_BYTES } from '../chat.constants';
 
@@ -26,20 +26,18 @@ export class ChatImageUploadRequestDto {
   @Max(MAX_CHAT_IMAGE_SIZE_BYTES)
   size: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '이미지 너비 (px)',
     example: 1200,
-    required: false,
   })
   @IsOptional()
   @IsInt()
   @Min(1)
   width?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: '이미지 높이 (px)',
     example: 900,
-    required: false,
   })
   @IsOptional()
   @IsInt()

@@ -7,10 +7,19 @@ NestJS 기반 `plzdrawing` 백엔드입니다.
 - 일반 로그인, 소셜 로그인, 로그아웃
 - 설정 홈, 알림 설정, 앱 정보, 약관 조회/관리
 - 공지사항, 1:1 문의, 관리자 운영 API
+- 게시글 기반 채팅/작업 의뢰 플로우 및 WebSocket 실시간 이벤트
 - 코인 상품, 코인 주문, 토스 결제 승인/취소/웹훅 처리
 - 지갑/거래원장
 - 환전계좌 등록/관리/관리자 인증
 - 환전 신청/관리자 처리
+
+## 문서
+
+- [프로젝트 구조](docs/architecture.md)
+- [채팅 WebSocket](docs/websocket.md)
+- [결제/지갑 거래원장](docs/payment-ledger.md)
+- [테스트 가이드](docs/testing.md)
+- [운영/배포 체크리스트](docs/operations.md)
 
 ## 실행
 
@@ -40,6 +49,14 @@ pnpm db:migration:revert
 pnpm test
 ```
 
+커버리지 확인:
+
+```bash
+pnpm test:cov
+```
+
+커버리지 결과는 터미널 요약과 `coverage/lcov-report/index.html`, `coverage/coverage-summary.json`으로 생성됩니다. 단위 테스트 커버리지 기준선은 statements `70%`, branches `55%`, functions `50%`, lines `70%`입니다.
+
 특정 스펙만 실행할 때:
 
 ```bash
@@ -55,6 +72,8 @@ pnpm test
 - `PORT`
 - `NODE_ENV`
 - `SWAGGER_ENABLED`
+- `CORS_ORIGINS`: HTTP CORS 허용 origin 목록, 쉼표로 구분
+- `CHAT_WS_CORS_ORIGINS`: WebSocket CORS 허용 origin 목록, 비어 있으면 `CORS_ORIGINS` 사용
 
 ### DB
 
@@ -105,11 +124,13 @@ pnpm test
 
 ### Firebase
 
+- `FIREBASE_ENABLED`: Firebase Admin 사용 여부, 로컬에서 push 알림이 필요 없으면 `false`
 - `FIREBASE_CONFIG_PATH`: 로컬 또는 secret mount로 주입한 JSON 파일 경로
 - `FIREBASE_SERVICE_ACCOUNT_BASE64`: 런타임에 주입한 service account JSON의 base64 값
 
 참고:
 
+- `FIREBASE_ENABLED=false`이면 credential 없이 부팅하고 push 발송은 no-op으로 처리합니다.
 - 두 값 중 하나가 필요하며, 둘 다 있으면 `FIREBASE_SERVICE_ACCOUNT_BASE64`를 우선 사용합니다.
 - `firebase-service-account.json` 같은 실제 credential 파일은 저장소나 Docker 이미지에 포함하지 않습니다.
 
@@ -207,6 +228,28 @@ pnpm test
 - `GET /api/inquiry/v1/admin/:id`
 - `PATCH /api/inquiry/v1/admin/:id`
 
+### 채팅/실시간
+
+- `POST /api/chats`
+- `GET /api/chats`
+- `GET /api/chats/:id`
+- `DELETE /api/chats/:id`
+- `POST /api/chats/request-images/upload-url`
+- `GET /api/chats/:id/messages`
+- `POST /api/chats/:id/messages`
+- `POST /api/chats/:id/messages/image-upload`
+- `PATCH /api/chats/:id/read`
+- `PATCH /api/chats/:id/request`
+- `PATCH /api/chats/:id/accept`
+- `PATCH /api/chats/:id/reject`
+- `PATCH /api/chats/:id/cancel`
+- `PATCH /api/chats/:id/request-price-change`
+- `PATCH /api/chats/:id/pay`
+- `PATCH /api/chats/:id/start`
+- `POST /api/chats/:id/send-drawing`
+- `POST /api/chats/:id/revision`
+- `PATCH /api/chats/:id/confirm`
+
 ### 코인/지갑
 
 - `GET /api/coin-shop/v1/products`
@@ -230,6 +273,10 @@ pnpm test
 - `GET /api/withdraw-accounts/v1/admin`
 - `GET /api/withdraw-accounts/v1/admin/:id`
 - `PATCH /api/withdraw-accounts/v1/admin/:id/verify`
+
+## 채팅 WebSocket
+
+채팅 실시간 이벤트 계약은 [채팅 WebSocket](docs/websocket.md) 문서에서 관리합니다.
 
 ## 운영 메모
 

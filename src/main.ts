@@ -9,6 +9,8 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { Reflector } from '@nestjs/core';
+import { parseCorsOrigins } from './common/cors/cors.config';
+import { SocketIoCorsAdapter } from './common/adapters/socket-io-cors.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -28,11 +30,25 @@ async function bootstrap() {
     exclude: [{ path: 'chat-test', method: RequestMethod.GET }],
   });
 
+  const corsOrigins = parseCorsOrigins(
+    configService.get<string>('CORS_ORIGINS'),
+  );
+  const websocketCorsOrigins = parseCorsOrigins(
+    configService.get<string>('CHAT_WS_CORS_ORIGINS'),
+    corsOrigins,
+  );
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'https://plzdrawing.o-r.kr'],
+    origin: corsOrigins,
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   });
+  app.useWebSocketAdapter(
+    new SocketIoCorsAdapter(app, {
+      origin: websocketCorsOrigins,
+      credentials: true,
+    }),
+  );
 
   const swaggerEnabled =
     configService.get<string>('SWAGGER_ENABLED') !== 'false';

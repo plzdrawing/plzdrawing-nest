@@ -44,7 +44,7 @@ import { AuthTokenBlacklistService } from './auth-token-blacklist.service';
     KakaoAuthGuard,
   ],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, AuthTokenBlacklistService, JwtModule],
 })
 export class AuthModule implements OnModuleInit {
   constructor(private readonly configService: ConfigService) {}

@@ -216,6 +216,30 @@
       .flow code {
         color: #0a4f8a;
       }
+      .socket-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #3f5166;
+      }
+      .socket-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #a8b3bf;
+      }
+      .socket-dot.connected {
+        background: #0f8b7e;
+      }
+      .socket-dot.error {
+        background: #c14343;
+      }
+      .socket-log {
+        min-height: 220px;
+        max-height: 360px;
+      }
     </style>
   </head>
   <body>
@@ -223,7 +247,9 @@
       <h1>Chat Image Test Lab</h1>
       <p class="note">
         Same-origin page for end-to-end test: login/register, create chat room,
-        send image, and verify the other user can load it.
+        send image, and verify the other user can load it. Open this page from
+        <code>/chat-test</code> on the backend server; direct
+        <code>file://</code> access cannot perform browser-to-S3 uploads.
       </p>
 
       <div class="card">
@@ -231,8 +257,10 @@
         <input id="baseUrl" type="text" />
         <div class="flow">
           Quick flow:
-          <code>Register/Login A -> Register/Login B -> Create Post (A) -> Create
-          Chat Room (B) -> Send Image -> Refresh Viewer A/B</code>
+          <code
+            >Register/Login A -> Register/Login B -> Create Post (A) -> Create
+            Chat Room (B) -> Send Image -> Refresh Viewer A/B</code
+          >
         </div>
       </div>
 
@@ -247,7 +275,9 @@
           <label for="passwordA">Password</label>
           <input id="passwordA" type="password" placeholder="pass1234" />
           <div class="row">
-            <button class="secondary" onclick="registerUser('A')">Register A</button>
+            <button class="secondary" onclick="registerUser('A')">
+              Register A
+            </button>
             <button onclick="login('A')">Login A</button>
           </div>
           <label>Token A</label>
@@ -262,7 +292,9 @@
           <label for="passwordB">Password</label>
           <input id="passwordB" type="password" placeholder="pass1234" />
           <div class="row">
-            <button class="secondary" onclick="registerUser('B')">Register B</button>
+            <button class="secondary" onclick="registerUser('B')">
+              Register B
+            </button>
             <button onclick="login('B')">Login B</button>
           </div>
           <label>Token B</label>
@@ -277,6 +309,7 @@
           <label for="postTitle">Title</label>
           <input id="postTitle" type="text" value="Image Chat Test Post" />
           <label for="postContent">Content</label>
+          <!-- prettier-ignore -->
           <textarea id="postContent">Please test image upload in this room.</textarea>
           <label for="postCategory">Category</label>
           <select id="postCategory">
@@ -297,7 +330,11 @@
           <label for="chatPostId">Post ID</label>
           <input id="chatPostId" type="number" placeholder="post id" />
           <label for="chatDescription">Description</label>
-          <input id="chatDescription" type="text" value="Image chat test request" />
+          <input
+            id="chatDescription"
+            type="text"
+            value="Image chat test request"
+          />
           <label for="chatPrice">Price</label>
           <input id="chatPrice" type="number" value="1000" />
           <button onclick="createChatRoom()">Create Chat Room</button>
@@ -325,7 +362,11 @@
         <div class="card">
           <h3>Send Image</h3>
           <label for="imageChatRoomId">Chat Room ID</label>
-          <input id="imageChatRoomId" type="number" placeholder="chat room id" />
+          <input
+            id="imageChatRoomId"
+            type="number"
+            placeholder="chat room id"
+          />
           <label for="imageFile">Image File</label>
           <input id="imageFile" type="file" accept="image/*" />
           <label for="imageSendAs">Send As</label>
@@ -333,10 +374,12 @@
             <option value="A">User A</option>
             <option value="B">User B</option>
           </select>
-          <button onclick="sendImageMessage()">Send Image</button>
+          <button id="sendImageButton" onclick="sendImageMessage()">
+            Send Image
+          </button>
           <div class="note">
-            Uses <code>POST /api/chats/{id}/messages/image</code> with multipart
-            field name <code>image</code>.
+            Issues a presigned URL, uploads the raw file to S3 with
+            <code>PUT</code>, then stores the image message.
           </div>
         </div>
       </div>
@@ -346,7 +389,11 @@
         <div class="row">
           <div>
             <label for="viewerChatRoomId">Chat Room ID</label>
-            <input id="viewerChatRoomId" type="number" placeholder="chat room id" />
+            <input
+              id="viewerChatRoomId"
+              type="number"
+              placeholder="chat room id"
+            />
           </div>
           <div>
             <label for="viewerLimit">Limit</label>
@@ -363,7 +410,11 @@
           <button class="secondary" onclick="refreshBothViewers()">
             Refresh Both
           </button>
-          <button class="ghost" id="autoRefreshBtn" onclick="toggleAutoRefresh()">
+          <button
+            class="ghost"
+            id="autoRefreshBtn"
+            onclick="toggleAutoRefresh()"
+          >
             Auto Refresh: OFF
           </button>
         </div>
@@ -388,7 +439,9 @@
             <input id="readChatRoomId" type="number" />
           </div>
           <div>
-            <label for="lastReadMessageId">Last Read Message ID (optional)</label>
+            <label for="lastReadMessageId"
+              >Last Read Message ID (optional)</label
+            >
             <input id="lastReadMessageId" type="number" />
           </div>
           <div>
@@ -399,21 +452,118 @@
             </select>
           </div>
         </div>
-        <button class="secondary" style="margin-top: 10px" onclick="markAsRead()">
+        <button
+          class="secondary"
+          style="margin-top: 10px"
+          onclick="markAsRead()"
+        >
           Mark As Read
         </button>
       </div>
+
+      <h2>6) WebSocket</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Socket Connections</h3>
+          <div class="row">
+            <button onclick="connectSocket('A')">Connect A</button>
+            <button class="secondary" onclick="disconnectSocket('A')">
+              Disconnect A
+            </button>
+          </div>
+          <div class="socket-status" style="margin-top: 8px">
+            <span id="socketDotA" class="socket-dot"></span>
+            <span id="socketStatusA">A disconnected</span>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <button onclick="connectSocket('B')">Connect B</button>
+            <button class="secondary" onclick="disconnectSocket('B')">
+              Disconnect B
+            </button>
+          </div>
+          <div class="socket-status" style="margin-top: 8px">
+            <span id="socketDotB" class="socket-dot"></span>
+            <span id="socketStatusB">B disconnected</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Room Join</h3>
+          <label for="wsChatRoomId">Chat Room ID</label>
+          <input id="wsChatRoomId" type="number" placeholder="chat room id" />
+          <label for="wsRoomAs">Use Socket</label>
+          <select id="wsRoomAs">
+            <option value="A">User A</option>
+            <option value="B">User B</option>
+          </select>
+          <div class="row">
+            <button onclick="socketJoinRoom()">Join Room</button>
+            <button class="secondary" onclick="socketLeaveRoom()">
+              Leave Room
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Socket Send</h3>
+          <label for="wsSendChatRoomId">Chat Room ID</label>
+          <input
+            id="wsSendChatRoomId"
+            type="number"
+            placeholder="chat room id"
+          />
+          <label for="wsSendContent">Content</label>
+          <textarea id="wsSendContent">Hello through WebSocket.</textarea>
+          <label for="wsSendAs">Send As</label>
+          <select id="wsSendAs">
+            <option value="A">User A</option>
+            <option value="B">User B</option>
+          </select>
+          <button onclick="socketSendText()">Send via Socket</button>
+        </div>
+
+        <div class="card">
+          <h3>Socket Read</h3>
+          <label for="wsReadChatRoomId">Chat Room ID</label>
+          <input
+            id="wsReadChatRoomId"
+            type="number"
+            placeholder="chat room id"
+          />
+          <label for="wsLastReadMessageId"
+            >Last Read Message ID (optional)</label
+          >
+          <input id="wsLastReadMessageId" type="number" />
+          <label for="wsReadAs">Read As</label>
+          <select id="wsReadAs">
+            <option value="A">User A</option>
+            <option value="B">User B</option>
+          </select>
+          <button class="secondary" onclick="socketMarkAsRead()">
+            Mark Read via Socket
+          </button>
+        </div>
+      </div>
+
+      <h2>WebSocket Event Log</h2>
+      <pre id="socketLog" class="socket-log"></pre>
 
       <h2>Response Log</h2>
       <pre id="log"></pre>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script>
       const state = {
-        baseUrl: localStorage.getItem('chatTestBaseUrl') || window.location.origin,
+        baseUrl:
+          localStorage.getItem('chatTestBaseUrl') || window.location.origin,
         tokens: {
           A: localStorage.getItem('chatTestTokenA') || '',
           B: localStorage.getItem('chatTestTokenB') || '',
+        },
+        sockets: {
+          A: null,
+          B: null,
         },
         autoRefreshTimer: null,
       };
@@ -426,6 +576,21 @@
             ? String(message)
             : `${message}\n${JSON.stringify(data, null, 2)}`;
         el.textContent = `[${now}] ${body}\n\n${el.textContent}`.trim();
+      }
+
+      function socketLog(userKey, event, data) {
+        const el = document.getElementById('socketLog');
+        const now = new Date().toISOString();
+        el.textContent =
+          `[${now}] ${userKey} ${event}\n${JSON.stringify(data, null, 2)}\n\n${el.textContent}`.trim();
+      }
+
+      function setSocketStatus(userKey, status, kind = '') {
+        document.getElementById(`socketStatus${userKey}`).textContent =
+          `${userKey} ${status}`;
+        const dot = document.getElementById(`socketDot${userKey}`);
+        dot.classList.remove('connected', 'error');
+        if (kind) dot.classList.add(kind);
       }
 
       function escapeHtml(value) {
@@ -443,8 +608,9 @@
 
       function setToken(userKey, token) {
         state.tokens[userKey] = token || '';
-        document.getElementById(userKey === 'A' ? 'tokenA' : 'tokenB').textContent =
-          state.tokens[userKey];
+        document.getElementById(
+          userKey === 'A' ? 'tokenA' : 'tokenB',
+        ).textContent = state.tokens[userKey];
         localStorage.setItem(
           userKey === 'A' ? 'chatTestTokenA' : 'chatTestTokenB',
           state.tokens[userKey],
@@ -453,11 +619,15 @@
 
       function setSharedChatRoomId(chatRoomId) {
         if (!chatRoomId) return;
-        document.getElementById('chatRoomIdDisplay').textContent = String(chatRoomId);
+        document.getElementById('chatRoomIdDisplay').textContent =
+          String(chatRoomId);
         document.getElementById('sendChatRoomId').value = String(chatRoomId);
         document.getElementById('imageChatRoomId').value = String(chatRoomId);
         document.getElementById('viewerChatRoomId').value = String(chatRoomId);
         document.getElementById('readChatRoomId').value = String(chatRoomId);
+        document.getElementById('wsChatRoomId').value = String(chatRoomId);
+        document.getElementById('wsSendChatRoomId').value = String(chatRoomId);
+        document.getElementById('wsReadChatRoomId').value = String(chatRoomId);
       }
 
       async function apiFetch(path, options = {}, userKey) {
@@ -525,7 +695,9 @@
             userKey === 'A' ? 'passwordA' : 'passwordB',
           ).value;
           if (!email || !password) {
-            log(`Login ${userKey} failed`, { error: 'email/password required' });
+            log(`Login ${userKey} failed`, {
+              error: 'email/password required',
+            });
             return;
           }
 
@@ -550,10 +722,19 @@
           const form = new FormData();
           form.append('title', document.getElementById('postTitle').value);
           form.append('content', document.getElementById('postContent').value);
-          form.append('category', document.getElementById('postCategory').value);
+          form.append(
+            'category',
+            document.getElementById('postCategory').value,
+          );
 
-          const result = await apiFetch('/posts', { method: 'POST', body: form }, 'A');
-          document.getElementById('postIdDisplay').textContent = String(result.id || '');
+          const result = await apiFetch(
+            '/posts',
+            { method: 'POST', body: form },
+            'A',
+          );
+          document.getElementById('postIdDisplay').textContent = String(
+            result.id || '',
+          );
           document.getElementById('chatPostId').value = String(result.id || '');
           log('Post created', result);
         } catch (error) {
@@ -581,7 +762,8 @@
             'B',
           );
 
-          const chatRoomId = result.chatRoom?.chatRoomId || result.chatRoomId || result.id;
+          const chatRoomId =
+            result.chatRoom?.chatRoomId || result.chatRoomId || result.id;
           setSharedChatRoomId(chatRoomId);
           log('Chat room created', result);
         } catch (error) {
@@ -591,7 +773,9 @@
 
       async function sendTextMessage() {
         try {
-          const chatRoomId = Number(document.getElementById('sendChatRoomId').value);
+          const chatRoomId = Number(
+            document.getElementById('sendChatRoomId').value,
+          );
           const content = document.getElementById('sendContent').value;
           const userKey = document.getElementById('sendAs').value;
           if (!chatRoomId) {
@@ -616,8 +800,22 @@
       }
 
       async function sendImageMessage() {
+        const sendButton = document.getElementById('sendImageButton');
+        let stage = 'validation';
+
         try {
-          const chatRoomId = Number(document.getElementById('imageChatRoomId').value);
+          if (window.location.protocol === 'file:') {
+            log('Send image failed', {
+              error: 'Open the test page through the backend server',
+              url: `${state.baseUrl}/chat-test`,
+              reason: 'S3 CORS does not accept the file:// origin',
+            });
+            return;
+          }
+
+          const chatRoomId = Number(
+            document.getElementById('imageChatRoomId').value,
+          );
           const fileInput = document.getElementById('imageFile');
           const userKey = document.getElementById('imageSendAs').value;
           const file = fileInput.files && fileInput.files[0];
@@ -631,24 +829,115 @@
             return;
           }
 
-          const form = new FormData();
-          form.append('image', file);
+          const allowedContentTypes = ['image/jpeg', 'image/png', 'image/webp'];
+          if (!allowedContentTypes.includes(file.type)) {
+            log('Send image failed', {
+              error: 'Only JPEG, PNG, and WebP images are supported',
+              contentType: file.type || '(empty)',
+            });
+            return;
+          }
+          if (file.size > 10 * 1024 * 1024) {
+            log('Send image failed', {
+              error: 'Image must be 10MB or smaller',
+              size: file.size,
+            });
+            return;
+          }
 
+          sendButton.disabled = true;
+          const dimensions = await getImageDimensions(file);
+
+          stage = 'presigned URL request';
+          const upload = await apiFetch(
+            `/chats/${chatRoomId}/messages/image-upload`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: file.name,
+                contentType: file.type,
+                size: file.size,
+                ...dimensions,
+              }),
+            },
+            userKey,
+          );
+          log('Image upload URL issued', {
+            objectKey: upload.objectKey,
+            expiresAt: upload.expiresAt,
+          });
+
+          stage = 'S3 PUT upload';
+          const s3Response = await fetch(upload.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file,
+          });
+          if (!s3Response.ok) {
+            const responseBody = await s3Response.text();
+            throw {
+              status: s3Response.status,
+              data: responseBody || s3Response.statusText,
+            };
+          }
+          log('S3 image upload completed', {
+            status: s3Response.status,
+            objectKey: upload.objectKey,
+            etag: s3Response.headers.get('etag'),
+          });
+
+          stage = 'image message creation';
           const result = await apiFetch(
-            `/chats/${chatRoomId}/messages/image`,
-            { method: 'POST', body: form },
+            `/chats/${chatRoomId}/messages`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'IMAGE',
+                objectKey: upload.objectKey,
+                size: file.size,
+                mimeType: file.type,
+                ...dimensions,
+              }),
+            },
             userKey,
           );
           log('Image message sent', result);
           fileInput.value = '';
           await refreshBothViewers();
         } catch (error) {
-          log('Send image failed', error);
+          log(`Send image failed (${stage})`, {
+            message: error?.message,
+            status: error?.status,
+            data: error?.data,
+          });
+        } finally {
+          sendButton.disabled = false;
         }
       }
 
+      function getImageDimensions(file) {
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          const objectUrl = URL.createObjectURL(file);
+
+          image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve({ width: image.naturalWidth, height: image.naturalHeight });
+          };
+          image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Failed to read image dimensions'));
+          };
+          image.src = objectUrl;
+        });
+      }
+
       function renderMessages(userKey, messages) {
-        const container = document.getElementById(userKey === 'A' ? 'viewerA' : 'viewerB');
+        const container = document.getElementById(
+          userKey === 'A' ? 'viewerA' : 'viewerB',
+        );
         if (!Array.isArray(messages) || messages.length === 0) {
           container.innerHTML = '<div class="note">No messages</div>';
           return;
@@ -658,7 +947,9 @@
           .map((message) => {
             const type = escapeHtml(message.type || 'UNKNOWN');
             const content = message.content ? escapeHtml(message.content) : '';
-            const imageUrl = message.imageUrl ? escapeHtml(message.imageUrl) : '';
+            const imageUrl = message.imageUrl
+              ? escapeHtml(message.imageUrl)
+              : '';
             const sentAt = message.sentAt
               ? new Date(message.sentAt).toLocaleString()
               : 'unknown';
@@ -688,10 +979,16 @@
 
       async function refreshViewer(userKey) {
         try {
-          const chatRoomId = Number(document.getElementById('viewerChatRoomId').value);
-          const limit = Number(document.getElementById('viewerLimit').value || 30);
+          const chatRoomId = Number(
+            document.getElementById('viewerChatRoomId').value,
+          );
+          const limit = Number(
+            document.getElementById('viewerLimit').value || 30,
+          );
           if (!chatRoomId) {
-            log(`Refresh viewer ${userKey} failed`, { error: 'chatRoomId is required' });
+            log(`Refresh viewer ${userKey} failed`, {
+              error: 'chatRoomId is required',
+            });
             return;
           }
 
@@ -722,7 +1019,9 @@
           return;
         }
 
-        const sec = Number(document.getElementById('autoRefreshSec').value || 3);
+        const sec = Number(
+          document.getElementById('autoRefreshSec').value || 3,
+        );
         const interval = Math.max(1, sec) * 1000;
         state.autoRefreshTimer = setInterval(() => {
           refreshBothViewers();
@@ -732,8 +1031,11 @@
 
       async function markAsRead() {
         try {
-          const chatRoomId = Number(document.getElementById('readChatRoomId').value);
-          const lastReadMessageId = document.getElementById('lastReadMessageId').value;
+          const chatRoomId = Number(
+            document.getElementById('readChatRoomId').value,
+          );
+          const lastReadMessageId =
+            document.getElementById('lastReadMessageId').value;
           const userKey = document.getElementById('readAs').value;
           if (!chatRoomId) {
             log('Mark as read failed', { error: 'chatRoomId is required' });
@@ -761,6 +1063,160 @@
         }
       }
 
+      function getSocket(userKey) {
+        const socket = state.sockets[userKey];
+        if (!socket || !socket.connected) {
+          throw new Error(`Socket ${userKey} is not connected`);
+        }
+        return socket;
+      }
+
+      function connectSocket(userKey) {
+        const token = getToken(userKey);
+        if (!token) {
+          socketLog(userKey, 'connect:failed', { error: 'token required' });
+          setSocketStatus(userKey, 'missing token', 'error');
+          return;
+        }
+
+        if (state.sockets[userKey]) {
+          state.sockets[userKey].disconnect();
+          state.sockets[userKey] = null;
+        }
+
+        const socket = io(`${state.baseUrl}/chats`, {
+          auth: { token },
+          transports: ['websocket', 'polling'],
+        });
+
+        state.sockets[userKey] = socket;
+        setSocketStatus(userKey, 'connecting');
+
+        [
+          'connection:ready',
+          'connection:error',
+          'chat:created',
+          'chat:joined',
+          'chat:left',
+          'chat:updated',
+          'chat:statusChanged',
+          'chat:deleted',
+          'chat:error',
+          'message:created',
+          'message:sent',
+          'message:read',
+          'message:read:ack',
+        ].forEach((eventName) => {
+          socket.on(eventName, (payload) => {
+            socketLog(userKey, eventName, payload);
+          });
+        });
+
+        socket.on('connect', () => {
+          setSocketStatus(userKey, `connected (${socket.id})`, 'connected');
+          socketLog(userKey, 'connect', { id: socket.id });
+        });
+
+        socket.on('disconnect', (reason) => {
+          setSocketStatus(userKey, `disconnected (${reason})`);
+          socketLog(userKey, 'disconnect', { reason });
+        });
+
+        socket.on('connect_error', (error) => {
+          setSocketStatus(userKey, `connect error: ${error.message}`, 'error');
+          socketLog(userKey, 'connect_error', {
+            message: error.message,
+            data: error.data,
+          });
+        });
+      }
+
+      function disconnectSocket(userKey) {
+        if (state.sockets[userKey]) {
+          state.sockets[userKey].disconnect();
+          state.sockets[userKey] = null;
+        }
+        setSocketStatus(userKey, 'disconnected');
+      }
+
+      function socketJoinRoom() {
+        try {
+          const userKey = document.getElementById('wsRoomAs').value;
+          const chatRoomId = Number(
+            document.getElementById('wsChatRoomId').value,
+          );
+          if (!chatRoomId) throw new Error('chatRoomId is required');
+
+          getSocket(userKey).emit('chat:join', { chatRoomId }, (response) => {
+            socketLog(userKey, 'chat:join:ack', response);
+          });
+        } catch (error) {
+          log('Socket join failed', { message: error.message });
+        }
+      }
+
+      function socketLeaveRoom() {
+        try {
+          const userKey = document.getElementById('wsRoomAs').value;
+          const chatRoomId = Number(
+            document.getElementById('wsChatRoomId').value,
+          );
+          if (!chatRoomId) throw new Error('chatRoomId is required');
+
+          getSocket(userKey).emit('chat:leave', { chatRoomId }, (response) => {
+            socketLog(userKey, 'chat:leave:ack', response);
+          });
+        } catch (error) {
+          log('Socket leave failed', { message: error.message });
+        }
+      }
+
+      function socketSendText() {
+        try {
+          const userKey = document.getElementById('wsSendAs').value;
+          const chatRoomId = Number(
+            document.getElementById('wsSendChatRoomId').value,
+          );
+          const content = document.getElementById('wsSendContent').value;
+          if (!chatRoomId) throw new Error('chatRoomId is required');
+          if (!content.trim()) throw new Error('content is required');
+
+          getSocket(userKey).emit(
+            'message:send',
+            { chatRoomId, type: 'TEXT', content },
+            (response) => {
+              socketLog(userKey, 'message:send:ack', response);
+            },
+          );
+        } catch (error) {
+          log('Socket send failed', { message: error.message });
+        }
+      }
+
+      function socketMarkAsRead() {
+        try {
+          const userKey = document.getElementById('wsReadAs').value;
+          const chatRoomId = Number(
+            document.getElementById('wsReadChatRoomId').value,
+          );
+          const lastReadMessageId = document.getElementById(
+            'wsLastReadMessageId',
+          ).value;
+          if (!chatRoomId) throw new Error('chatRoomId is required');
+
+          const payload = { chatRoomId };
+          if (lastReadMessageId) {
+            payload.lastReadMessageId = Number(lastReadMessageId);
+          }
+
+          getSocket(userKey).emit('message:read', payload, (response) => {
+            socketLog(userKey, 'message:read:ack', response);
+          });
+        } catch (error) {
+          log('Socket read failed', { message: error.message });
+        }
+      }
+
       function initPage() {
         const baseUrlInput = document.getElementById('baseUrl');
         baseUrlInput.value = state.baseUrl;
@@ -776,6 +1232,15 @@
           '<div class="note">Login and refresh to load messages.</div>';
         document.getElementById('viewerB').innerHTML =
           '<div class="note">Login and refresh to load messages.</div>';
+        setSocketStatus('A', 'disconnected');
+        setSocketStatus('B', 'disconnected');
+
+        if (window.location.protocol === 'file:') {
+          log('Direct file access detected', {
+            open: `${state.baseUrl}/chat-test`,
+            reason: 'S3 uploads require an HTTP origin allowed by bucket CORS',
+          });
+        }
       }
 
       initPage();
